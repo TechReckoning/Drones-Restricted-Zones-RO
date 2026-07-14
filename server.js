@@ -22,6 +22,9 @@ const supa = require('./lib/supabase');
 const billing = require('./lib/stripe');
 
 const app = express();
+// Render (and most PaaS) terminate TLS at a proxy and forward the request, so
+// trust the first proxy hop for correct client IPs / protocol.
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 // The Stripe webhook must see the RAW request body to verify its signature, so

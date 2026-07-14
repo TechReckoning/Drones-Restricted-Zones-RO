@@ -1,0 +1,33 @@
+# Render Blueprint (optional). You can either use this file via
+# "New +" -> "Blueprint", or create the service manually in the dashboard
+# (see DEPLOY.md). Secret values are marked sync:false so they are entered in
+# the dashboard, never committed to git.
+services:
+  - type: web
+    name: drones-restricted-zones-ro
+    runtime: node
+    plan: free            # upgrade to "starter" for always-on (no cold starts)
+    region: frankfurt      # EU region, closest to the users + Supabase EU
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PUBLIC_URL
+        value: https://drones-rz-romania.com
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_ANNUAL
+        sync: false
