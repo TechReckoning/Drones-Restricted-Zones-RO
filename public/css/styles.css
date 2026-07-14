@@ -357,6 +357,46 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   text-transform: uppercase;
 }
 
+/* ---------- Profile & equipment library ---------- */
+.lib-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--panel-border); margin: 12px 0; }
+.lib-tab {
+  border: none;
+  background: transparent;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.lib-tab:hover { color: var(--text); }
+.lib-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+.lib-pane { max-height: 62vh; overflow-y: auto; }
+.lib-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+.lib-field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.lib-field span { font-weight: 600; }
+.lib-field input, .lib-field select, .lib-field textarea {
+  padding: 7px 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+}
+.lib-field textarea { resize: vertical; }
+.lib-field input:focus, .lib-field select:focus, .lib-field textarea:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+.lib-formtitle { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 14px 0 2px; }
+
+.lib-list { display: flex; flex-direction: column; }
+.lib-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--panel-border); }
+.lr-main { font-size: 13px; }
+.lr-sub { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.lr-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+@media (max-width: 560px) { .lib-form { grid-template-columns: 1fr; } }
+
 /* ---------- Footer + cookie notice + terms (Phase 4) ---------- */
 .app-footer {
   flex: 0 0 auto;

@@ -29,6 +29,7 @@
       <button id="refresh-btn" class="btn btn-ghost" title="Fetch the latest data from ROMATSA">↻ Refresh</button>
       <span class="header-divider" aria-hidden="true"></span>
       <span id="user-email" class="user-email hidden"></span>
+      <button id="library-btn" class="btn btn-ghost hidden" title="Your operator profile, pilots and drones">👤 Profile</button>
       <button id="history-btn" class="btn btn-ghost hidden" title="Your saved flying zones">🗂 My zones</button>
       <button id="auth-btn" class="btn btn-primary">Sign in</button>
     </div>
@@ -147,6 +148,23 @@
       </label>
       <p id="subscribe-status" class="hint" role="status"></p>
       <p class="hint muted">Secure payment by Stripe · cancel anytime.</p>
+    </div>
+  </div>
+
+  <!-- Profile & equipment library -->
+  <div id="library-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2>Profile &amp; equipment</h2>
+      <p class="hint">Saved once, reused to pre-fill your flight-approval requests.</p>
+      <div class="lib-tabs">
+        <button class="lib-tab active" data-tab="operator">Operator</button>
+        <button class="lib-tab" data-tab="pilots">Pilots</button>
+        <button class="lib-tab" data-tab="drones">Drones</button>
+      </div>
+      <div id="lib-operator" class="lib-pane"></div>
+      <div id="lib-pilots" class="lib-pane hidden"></div>
+      <div id="lib-drones" class="lib-pane hidden"></div>
     </div>
   </div>
 

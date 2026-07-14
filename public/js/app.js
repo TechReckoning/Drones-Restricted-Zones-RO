@@ -2,6 +2,7 @@ import { buildKml, downloadKml } from './kml.js';
 import { auth } from './auth.js';
 import { history } from './history.js';
 import { billing } from './billing.js';
+import { library } from './library.js';
 import './consent.js';
 
 /* ------------------------------------------------------------------ *
@@ -539,6 +540,7 @@ auth.init().then(() => {
     loadFlight: (geometry) => loadSavedFlight(geometry),
   });
   billing.init();
+  library.init();
   // Reveal the save button if the user signs in while a zone is already drawn.
   auth.onChange(() => {
     if (state.flightLayer && auth.configured) els.saveBtn.classList.remove('hidden');

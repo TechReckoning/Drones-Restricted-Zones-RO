@@ -238,6 +238,64 @@ app.delete('/api/flights/:id', requireUser, requireEntitlement, async (req, res)
 });
 
 // ---------------------------------------------------------------------------
+// Profile + equipment library (flight-request generator, Phase A)
+// Pro feature → requireEntitlement. User-scoped client so RLS applies.
+// ---------------------------------------------------------------------------
+
+// Keep only allowed columns from the request body; treat '' as null.
+function pick(body, fields) {
+  const out = {};
+  for (const f of fields) if (body && body[f] !== undefined) out[f] = body[f] === '' ? null : body[f];
+  return out;
+}
+
+// Single operator profile per user (upsert).
+app.get('/api/profile/operator', requireUser, requireEntitlement, async (req, res) => {
+  const { data, error } = await req.db.from('operator_profile').select('*').eq('user_id', req.user.id).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ operator: data || null });
+});
+
+app.put('/api/profile/operator', requireUser, requireEntitlement, async (req, res) => {
+  const row = pick(req.body, ['operator_name', 'contact_details', 'contact_person', 'phone_landline', 'phone_mobile', 'fax', 'email', 'operator_code']);
+  row.user_id = req.user.id;
+  row.updated_at = new Date().toISOString();
+  const { data, error } = await req.db.from('operator_profile').upsert(row, { onConflict: 'user_id' }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ operator: data });
+});
+
+// Generic owner-scoped CRUD for the library tables (pilots, drones).
+function registerLibraryCrud(path, table, fields) {
+  app.get(`/api/${path}`, requireUser, requireEntitlement, async (req, res) => {
+    const { data, error } = await req.db.from(table).select('*').order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ items: data });
+  });
+  app.post(`/api/${path}`, requireUser, requireEntitlement, async (req, res) => {
+    const row = pick(req.body, fields);
+    row.user_id = req.user.id;
+    const { data, error } = await req.db.from(table).insert(row).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(201).json({ item: data });
+  });
+  app.patch(`/api/${path}/:id`, requireUser, requireEntitlement, async (req, res) => {
+    const { data, error } = await req.db.from(table).update(pick(req.body, fields)).eq('id', req.params.id).select().maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: 'Not found.' });
+    res.json({ item: data });
+  });
+  app.delete(`/api/${path}/:id`, requireUser, requireEntitlement, async (req, res) => {
+    const { error } = await req.db.from(table).delete().eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(204).end();
+  });
+}
+
+registerLibraryCrud('pilots', 'pilots', ['name', 'phone', 'qualifications']);
+registerLibraryCrud('drones', 'drones', ['registration', 'serial', 'manufacturer', 'model', 'operating_class', 'category', 'operator_code', 'mtom_kg']);
+
+// ---------------------------------------------------------------------------
 // Trial + billing entitlement (Phase 3)
 //
 // Access to pro features = an active 7-day trial OR an active subscription.
