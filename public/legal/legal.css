@@ -1,0 +1,72 @@
+/* Shared styling for the standalone legal/policy pages. */
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --primary: #2563eb;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.65;
+}
+.legal-header {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.legal-header a { color: #bfdbfe; text-decoration: none; font-size: 14px; }
+.legal-header a:hover { text-decoration: underline; }
+.legal-header .brand { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+main.legal {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+main.legal .card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 32px;
+}
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 28px 0 8px; }
+h3 { font-size: 15px; margin: 18px 0 6px; }
+.updated { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+p, li { font-size: 15px; }
+a { color: var(--primary); }
+ul { padding-left: 22px; }
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: #f1f5f9; }
+.table-wrap { overflow-x: auto; }
+.note {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  margin: 16px 0;
+}
+.legal-nav { margin-top: 24px; font-size: 14px; }
+.legal-nav a { margin-right: 14px; }
+.legal-footer { text-align: center; color: var(--muted); font-size: 13px; padding: 20px; }
+
+/* Highlight placeholders that the operator must fill in before publishing. */
+.ph {
+  background: #fef08a;
+  color: #713f12;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-weight: 600;
+  white-space: nowrap;
+}

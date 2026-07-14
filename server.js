@@ -442,6 +442,11 @@ app.post('/api/billing/sync', requireUser, async (req, res) => {
   }
 });
 
+// Clean URLs for the legal/policy pages (Phase 4).
+['privacy', 'cookies', 'consumer'].forEach((page) => {
+  app.get('/' + page, (req, res) => res.sendFile(path.join(__dirname, 'public', 'legal', page + '.html')));
+});
+
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 app.listen(PORT, () => {

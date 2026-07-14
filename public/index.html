@@ -91,6 +91,16 @@
     </aside>
   </main>
 
+  <footer class="app-footer">
+    <span>© <strong>Drones Restricted Zones RO</strong></span>
+    <nav>
+      <a href="/privacy">Privacy</a>
+      <a href="/cookies">Cookies</a>
+      <a href="/consumer">Consumer rights</a>
+    </nav>
+    <span class="footer-note">Unofficial aid — verify with ROMATSA &amp; NOTAMs before flying.</span>
+  </footer>
+
   <!-- Sign-in modal -->
   <div id="signin-modal" class="modal-overlay hidden">
     <div class="modal">
@@ -129,9 +139,22 @@
           <span class="plan-price">550 RON</span><span class="plan-per">per year</span>
         </button>
       </div>
+      <label class="terms-agree">
+        <input type="checkbox" id="terms-agree" />
+        <span>I have read and agree to the
+          <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> and
+          <a href="/consumer" target="_blank" rel="noopener">Subscription Terms</a>.</span>
+      </label>
       <p id="subscribe-status" class="hint" role="status"></p>
       <p class="hint muted">Secure payment by Stripe · cancel anytime.</p>
     </div>
+  </div>
+
+  <!-- Cookie notice -->
+  <div id="cookie-banner" class="cookie-banner hidden">
+    <span>We use only essential cookies to sign you in and process payments — no tracking.
+      See our <a href="/cookies">Cookie Policy</a> and <a href="/privacy">Privacy Policy</a>.</span>
+    <button class="btn btn-mini btn-primary" data-ack>OK</button>
   </div>
 
   <!-- Toast -->

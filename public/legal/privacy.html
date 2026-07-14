@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<!--
+  TEMPLATE — Privacy / Confidentiality Policy.
+  Before publishing: replace every [[PLACEHOLDER]] (highlighted in yellow) with
+  your real details and have the final text reviewed by a qualified lawyer. This
+  template reflects what the app actually does but is not legal advice.
+  Placeholders: COMPANY_NAME, COMPANY_FORM, COMPANY_ADDRESS, COMPANY_REG,
+  COMPANY_CUI, CONTACT_EMAIL, DPO_CONTACT, EFFECTIVE_DATE, SUPABASE_REGION.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Drones Restricted Zones RO</title>
+  <link rel="stylesheet" href="/legal/legal.css" />
+</head>
+<body>
+  <header class="legal-header">
+    <span class="brand">🛰️ Drones Restricted Zones RO</span>
+    <a href="/">← Back to app</a>
+  </header>
+
+  <main class="legal">
+    <div class="card">
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: <span class="ph">[[EFFECTIVE_DATE]]</span></p>
+
+      <p>This Privacy Policy explains how <span class="ph">[[COMPANY_NAME]]</span>
+        (<span class="ph">[[COMPANY_FORM]]</span>), the operator of the
+        <strong>Drones Restricted Zones RO</strong> application (the "Service"),
+        collects and processes personal data in accordance with Regulation (EU)
+        2016/679 (GDPR) and applicable Romanian law.</p>
+
+      <h2>1. Data controller</h2>
+      <p><strong>Controller:</strong> <span class="ph">[[COMPANY_NAME]]</span><br />
+        <strong>Registered office:</strong> <span class="ph">[[COMPANY_ADDRESS]]</span><br />
+        <strong>Trade Register no.:</strong> <span class="ph">[[COMPANY_REG]]</span> ·
+        <strong>Fiscal code (CUI):</strong> <span class="ph">[[COMPANY_CUI]]</span><br />
+        <strong>Contact:</strong> <a href="mailto:[[CONTACT_EMAIL]]"><span class="ph">[[CONTACT_EMAIL]]</span></a><br />
+        <strong>Data protection contact:</strong> <span class="ph">[[DPO_CONTACT]]</span></p>
+
+      <h2>2. What we collect</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Category</th><th>Data</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Account</td><td>Email address (used for passwordless "magic link" sign-in) and a unique account identifier.</td><td>You, at sign-up.</td></tr>
+            <tr><td>Saved flying zones</td><td>The geometry (coordinates) you draw, computed area, a snapshot of overlapping restricted zones, the dataset version, and timestamps.</td><td>Created by you in the app.</td></tr>
+            <tr><td>Billing</td><td>Subscription status, plan, billing period and a payment-processor customer identifier. <strong>We do not receive or store your card details</strong> — these are handled directly by Stripe.</td><td>Stripe, when you subscribe.</td></tr>
+            <tr><td>Technical</td><td>Server logs: IP address, request time, endpoint and basic device/browser metadata, for security and reliability.</td><td>Automatically.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>3. Why we process it, and our legal basis</h2>
+      <ul>
+        <li><strong>Providing accounts and saved history</strong> — performance of our contract with you (Art. 6(1)(b)).</li>
+        <li><strong>Processing subscriptions and payments</strong> — performance of the contract (Art. 6(1)(b)) and compliance with accounting/tax obligations (Art. 6(1)(c)).</li>
+        <li><strong>Security, fraud prevention and service reliability</strong> — our legitimate interests (Art. 6(1)(f)).</li>
+      </ul>
+
+      <h2>4. Processors and third parties</h2>
+      <p>We share data only with service providers acting on our behalf under data-processing agreements:</p>
+      <ul>
+        <li><strong>Supabase</strong> — authentication, database and hosting for your account and saved zones (region: <span class="ph">[[SUPABASE_REGION]]</span>).</li>
+        <li><strong>Stripe</strong> — payment processing and subscription management. Stripe is the processor of your payment data as an independent controller for its own compliance purposes; see stripe.com/privacy.</li>
+        <li><strong>OpenStreetMap</strong> — map tiles are loaded from OpenStreetMap servers, which necessarily receive your IP address to serve the imagery.</li>
+      </ul>
+
+      <h2>5. International transfers</h2>
+      <p>Some processors (e.g. Stripe) may process data outside the European Economic
+        Area. Where they do, transfers are protected by adequacy decisions or the
+        European Commission's Standard Contractual Clauses.</p>
+
+      <h2>6. Retention</h2>
+      <p>Account and saved-zone data are kept for as long as your account is active.
+        You may delete saved zones at any time and request deletion of your account.
+        Billing and invoicing records are retained for the period required by
+        Romanian fiscal law (<span class="ph">[[RETENTION_YEARS]]</span> years). Server
+        logs are kept for a limited period for security purposes.</p>
+
+      <h2>7. Your rights</h2>
+      <p>Under the GDPR you have the right to access, rectification, erasure,
+        restriction, portability, and to object to processing, as well as to withdraw
+        consent where processing is based on it. To exercise any right, contact us at
+        <a href="mailto:[[CONTACT_EMAIL]]"><span class="ph">[[CONTACT_EMAIL]]</span></a>.</p>
+      <p>You also have the right to lodge a complaint with the Romanian supervisory
+        authority, the <strong>Autoritatea Națională de Supraveghere a Prelucrării
+        Datelor cu Caracter Personal (ANSPDCP)</strong> —
+        <a href="https://www.dataprotection.ro" target="_blank" rel="noopener">dataprotection.ro</a>.</p>
+
+      <h2>8. Cookies and local storage</h2>
+      <p>The Service uses only strictly necessary cookies and browser storage. See our
+        <a href="/cookies">Cookie Policy</a> for details.</p>
+
+      <h2>9. Changes</h2>
+      <p>We may update this policy; the "last updated" date above reflects the current
+        version. Material changes will be notified in the app.</p>
+
+      <div class="note">⚠️ <strong>Safety notice:</strong> Drones Restricted Zones RO is an
+        unofficial visualization aid. Always verify against the official ROMATSA source
+        and current NOTAMs before any flight.</div>
+
+      <nav class="legal-nav">
+        <a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/consumer">Consumer rights</a>
+      </nav>
+    </div>
+    <p class="legal-footer">© <span class="ph">[[COMPANY_NAME]]</span></p>
+  </main>
+</body>
+</html>

@@ -2,6 +2,7 @@ import { buildKml, downloadKml } from './kml.js';
 import { auth } from './auth.js';
 import { history } from './history.js';
 import { billing } from './billing.js';
+import './consent.js';
 
 /* ------------------------------------------------------------------ *
  * Drones Restricted Zones RO — frontend controller.

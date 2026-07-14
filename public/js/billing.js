@@ -20,6 +20,9 @@ export const billing = {
     document.querySelectorAll('[data-plan]').forEach((b) =>
       b.addEventListener('click', () => startCheckout(b.dataset.plan))
     );
+    // Plan buttons stay disabled until the Terms/Privacy checkbox is ticked.
+    el('terms-agree')?.addEventListener('change', syncTermsGate);
+    syncTermsGate();
 
     const params = new URLSearchParams(location.search);
     if (params.get('checkout') === 'success') {
@@ -69,9 +72,20 @@ export const billing = {
       toast('Billing is not configured on this server yet.');
       return;
     }
+    const terms = el('terms-agree');
+    if (terms) terms.checked = false;
+    const status = el('subscribe-status');
+    if (status) status.textContent = '';
+    syncTermsGate();
     openModal('subscribe-modal');
   },
 };
+
+// Enable the plan buttons only when the Terms/Privacy checkbox is ticked.
+function syncTermsGate() {
+  const agreed = Boolean(el('terms-agree') && el('terms-agree').checked);
+  document.querySelectorAll('.plan-card').forEach((c) => { c.disabled = !agreed; });
+}
 
 async function startCheckout(plan) {
   el('subscribe-status').textContent = 'Redirecting to secure checkout…';
