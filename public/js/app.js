@@ -1,4 +1,6 @@
 import { buildKml, downloadKml } from './kml.js';
+import { auth } from './auth.js';
+import { history } from './history.js';
 
 /* ------------------------------------------------------------------ *
  * Drones Restricted Zones RO — frontend controller.
@@ -48,6 +50,7 @@ const els = {
   statVertices: $('stat-vertices'),
   statOverlaps: $('stat-overlaps'),
   exportBtn: $('export-kml-btn'),
+  saveBtn: $('save-flight-btn'),
   coordsList: $('coords-list'),
   copyCoordsBtn: $('copy-coords-btn'),
   overlapList: $('overlap-list'),
@@ -252,16 +255,33 @@ map.pm.setGlobalOptions({ pathOptions: STYLE.flight });
 
 map.on('pm:create', (e) => {
   if (e.shape !== 'Polygon') return;
+  attachFlightLayer(e.layer);
+});
+
+// Shared setup for a flying-zone layer, whether freshly drawn or reloaded from
+// saved history.
+function attachFlightLayer(layer, { fit = false } = {}) {
   if (state.flightLayer) map.removeLayer(state.flightLayer);
-  state.flightLayer = e.layer;
-  state.flightLayer.setStyle(STYLE.flight);
-  state.flightLayer.on('pm:edit', analyzeFlight);
-  state.flightLayer.on('pm:markerdragend', analyzeFlight);
+  state.flightLayer = layer;
+  layer.setStyle(STYLE.flight);
+  layer.on('pm:edit', analyzeFlight);
+  layer.on('pm:markerdragend', analyzeFlight);
   els.editBtn.disabled = false;
   els.clearBtn.disabled = false;
   els.summary.classList.remove('hidden');
+  if (auth.configured) els.saveBtn.classList.remove('hidden');
   analyzeFlight();
-});
+  if (fit) map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+}
+
+// Reload a saved GeoJSON Polygon back onto the map as the active flying zone.
+function loadSavedFlight(geometry) {
+  const ring = (geometry && geometry.coordinates && geometry.coordinates[0]) || [];
+  const latlngs = ring.map(([lng, lat]) => [lat, lng]);
+  if (latlngs.length < 3) return;
+  const layer = L.polygon(latlngs).addTo(map);
+  attachFlightLayer(layer, { fit: true });
+}
 
 els.editBtn.addEventListener('click', () => {
   if (!state.flightLayer) return;
@@ -283,6 +303,7 @@ function clearFlight() {
   }
   clearOverlaps();
   els.summary.classList.add('hidden');
+  els.saveBtn.classList.add('hidden');
   els.editBtn.disabled = true;
   els.clearBtn.disabled = true;
   els.editBtn.textContent = 'Edit';
@@ -484,5 +505,38 @@ function renderDatasetInfo(meta) {
   }
 }
 
+// Compact snapshot of the current drawing for saving to history.
+function currentFlightForSave() {
+  if (!state.lastFlight) return null;
+  const overlaps = (state.lastOverlaps || []).map((o) => {
+    const p = o.feature.properties || {};
+    return {
+      zone_id: p.zone_id,
+      lower_lim: p.lower_lim,
+      upper_lim: p.upper_lim,
+      status: p.status,
+      contact: p.contact,
+      overlap_area_m2: o.overlapArea != null ? Math.round(o.overlapArea) : null,
+    };
+  });
+  return {
+    geometry: state.lastFlight.geometry,
+    overlap_zones: overlaps,
+    area_m2: turf.area(state.lastFlight),
+    dataset_valid_from: state.datasetValidFrom || null,
+    suggestedName: `Flying zone (${overlaps.length} overlap${overlaps.length === 1 ? '' : 's'})`,
+  };
+}
+
 // ---- go ----
 loadZones();
+auth.init().then(() => {
+  history.init({
+    getFlight: currentFlightForSave,
+    loadFlight: (geometry) => loadSavedFlight(geometry),
+  });
+  // Reveal the save button if the user signs in while a zone is already drawn.
+  auth.onChange(() => {
+    if (state.flightLayer && auth.configured) els.saveBtn.classList.remove('hidden');
+  });
+});

@@ -27,6 +27,10 @@
       <button id="new-chip" class="chip hidden" title="Show only zones added in this update"></button>
       <span id="data-status" class="badge badge-loading">Loading zones…</span>
       <button id="refresh-btn" class="btn btn-ghost" title="Fetch the latest data from ROMATSA">↻ Refresh</button>
+      <span class="header-divider" aria-hidden="true"></span>
+      <span id="user-email" class="user-email hidden"></span>
+      <button id="history-btn" class="btn btn-ghost hidden" title="Your saved flying zones">🗂 My zones</button>
+      <button id="auth-btn" class="btn btn-primary">Sign in</button>
     </div>
   </header>
 
@@ -54,6 +58,7 @@
           </div>
 
           <button id="export-kml-btn" class="btn btn-primary btn-block">⬇ Export flying zone (.KML)</button>
+          <button id="save-flight-btn" class="btn btn-ghost btn-block hidden">💾 Save to my history</button>
 
           <section class="subsection">
             <h3>Coordinates <span class="muted">(lat, lon — WGS84)</span>
@@ -84,6 +89,35 @@
       <div id="zone-list" class="zone-list" role="listbox" aria-label="Restricted zones"></div>
     </aside>
   </main>
+
+  <!-- Sign-in modal -->
+  <div id="signin-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2>Sign in</h2>
+      <p class="hint">Enter your email and we'll send you a magic sign-in link — no password needed.</p>
+      <form id="signin-form">
+        <input id="signin-email" class="search" type="email" required autocomplete="email" placeholder="you@example.com" />
+        <button type="submit" class="btn btn-primary btn-block">Send magic link</button>
+      </form>
+      <p id="signin-status" class="hint" role="status"></p>
+    </div>
+  </div>
+
+  <!-- History drawer -->
+  <div id="history-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2>My flying zones</h2>
+      <div id="history-list" class="history-list"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <!-- Supabase (magic-link auth) -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 
   <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"

@@ -3,20 +3,25 @@
 /**
  * Drones Restricted Zones RO — backend.
  *
- * Two jobs:
+ * Jobs:
  *  1. Serve the static frontend in ./public
  *  2. Proxy the official ROMATSA restricted-zones GeoJSON at /api/zones.
+ *  3. (Phase 2) Accounts + saved flying-zone history via Supabase (/api/flights).
  *
- * The proxy exists because the ROMATSA endpoint sends no CORS header, so a
+ * The zones proxy exists because the ROMATSA endpoint sends no CORS header, so a
  * browser cannot fetch it directly. Fetching server-side sidesteps that and
  * lets us cache the result and keep an on-disk snapshot as an offline fallback.
  */
 
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const supa = require('./lib/supabase');
 
 const app = express();
+app.use(express.json({ limit: '1mb' }));
 const PORT = process.env.PORT || 3000;
 
 const SOURCE_URL =
@@ -143,9 +148,90 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, cached: Boolean(cache.data), cachedAt: cache.ts ? new Date(cache.ts).toISOString() : null });
 });
 
+// ---------------------------------------------------------------------------
+// Accounts + saved flying-zone history (Phase 2)
+// ---------------------------------------------------------------------------
+
+// Public browser config: safe to expose (anon key is a browser key). If Supabase
+// isn't configured, the frontend hides all account UI and stays fully usable.
+app.get('/api/config', (req, res) => {
+  if (!supa.isConfigured()) return res.json({ configured: false });
+  res.json({ configured: true, supabaseUrl: supa.config.url, supabaseAnonKey: supa.config.anonKey });
+});
+
+// Verify the caller's Supabase access token and attach a user-scoped DB client
+// (RLS enforced as that user). 401 on any failure.
+async function requireUser(req, res, next) {
+  if (!supa.isConfigured()) {
+    return res.status(503).json({ error: 'Accounts are not configured on this server.' });
+  }
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Not signed in.' });
+  try {
+    const db = supa.userClient(token);
+    const { data, error } = await db.auth.getUser(token);
+    if (error || !data || !data.user) return res.status(401).json({ error: 'Invalid or expired session.' });
+    req.user = data.user;
+    req.db = db;
+    next();
+  } catch (err) {
+    console.error('[auth] verification error:', err.message);
+    res.status(401).json({ error: 'Could not verify session.' });
+  }
+}
+
+app.get('/api/flights', requireUser, async (req, res) => {
+  const { data, error } = await req.db
+    .from('flight_zones')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ flights: data });
+});
+
+app.post('/api/flights', requireUser, async (req, res) => {
+  const { name, geometry, overlap_zones, area_m2, dataset_valid_from } = req.body || {};
+  if (!geometry || geometry.type !== 'Polygon' || !Array.isArray(geometry.coordinates)) {
+    return res.status(400).json({ error: 'A GeoJSON Polygon geometry is required.' });
+  }
+  const row = {
+    user_id: req.user.id, // RLS `with check` also enforces this matches the caller
+    name: typeof name === 'string' && name.trim() ? name.trim().slice(0, 120) : 'Untitled flying zone',
+    geometry,
+    overlap_zones: Array.isArray(overlap_zones) ? overlap_zones.slice(0, 1000) : [],
+    area_m2: Number.isFinite(area_m2) ? area_m2 : null,
+    dataset_valid_from: dataset_valid_from || null,
+  };
+  const { data, error } = await req.db.from('flight_zones').insert(row).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json({ flight: data });
+});
+
+app.patch('/api/flights/:id', requireUser, async (req, res) => {
+  const name = req.body && typeof req.body.name === 'string' ? req.body.name.trim().slice(0, 120) : '';
+  if (!name) return res.status(400).json({ error: 'A name is required.' });
+  const { data, error } = await req.db
+    .from('flight_zones')
+    .update({ name })
+    .eq('id', req.params.id)
+    .select()
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Flying zone not found.' });
+  res.json({ flight: data });
+});
+
+app.delete('/api/flights/:id', requireUser, async (req, res) => {
+  const { error } = await req.db.from('flight_zones').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(204).end();
+});
+
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 app.listen(PORT, () => {
   console.log(`Drones Restricted Zones RO running at http://localhost:${PORT}`);
   console.log(`Zones source: ${SOURCE_URL}`);
+  console.log(`Accounts (Supabase): ${supa.isConfigured() ? 'configured' : 'NOT configured (account features disabled)'}`);
 });
