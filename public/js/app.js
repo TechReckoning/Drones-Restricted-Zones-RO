@@ -1,6 +1,7 @@
 import { buildKml, downloadKml } from './kml.js';
 import { auth } from './auth.js';
 import { history } from './history.js';
+import { billing } from './billing.js';
 
 /* ------------------------------------------------------------------ *
  * Drones Restricted Zones RO — frontend controller.
@@ -247,6 +248,7 @@ function panToZone(id) {
 //  Drawing the flying zone (left panel)
 // =================================================================== //
 els.drawBtn.addEventListener('click', () => {
+  if (!billing.ensurePro()) return; // gate: sign-in / active trial / subscription
   map.pm.enableDraw('Polygon', { snappable: true, finishOn: 'dblclick', templineStyle: STYLE.flight, hintlineStyle: STYLE.flight });
   els.drawHint.textContent = 'Click on the map to add corners. Double-click the last point (or click the first) to finish.';
 });
@@ -535,6 +537,7 @@ auth.init().then(() => {
     getFlight: currentFlightForSave,
     loadFlight: (geometry) => loadSavedFlight(geometry),
   });
+  billing.init();
   // Reveal the save button if the user signs in while a zone is already drawn.
   auth.onChange(() => {
     if (state.flightLayer && auth.configured) els.saveBtn.classList.remove('hidden');

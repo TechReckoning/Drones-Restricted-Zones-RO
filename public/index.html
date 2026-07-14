@@ -42,6 +42,7 @@
       </div>
 
       <div class="panel-body">
+        <div id="billing-banner" class="billing-banner hidden"></div>
         <div class="draw-controls">
           <button id="draw-btn" class="btn btn-primary">✏️ Draw flying zone</button>
           <button id="edit-btn" class="btn btn-ghost" disabled>Edit</button>
@@ -110,6 +111,26 @@
       <button class="modal-close" data-close aria-label="Close">×</button>
       <h2>My flying zones</h2>
       <div id="history-list" class="history-list"></div>
+    </div>
+  </div>
+
+  <!-- Subscribe modal -->
+  <div id="subscribe-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2>Subscribe to Pro</h2>
+      <p class="hint">Unlock flying-zone drawing, overlap analysis, KML export and saved history.</p>
+      <div class="plan-grid">
+        <button class="plan-card" data-plan="monthly">
+          <span class="plan-price">50 RON</span><span class="plan-per">per month</span>
+        </button>
+        <button class="plan-card plan-card-featured" data-plan="annual">
+          <span class="plan-badge">2 months free</span>
+          <span class="plan-price">550 RON</span><span class="plan-per">per year</span>
+        </button>
+      </div>
+      <p id="subscribe-status" class="hint" role="status"></p>
+      <p class="hint muted">Secure payment by Stripe · cancel anytime.</p>
     </div>
   </div>
 

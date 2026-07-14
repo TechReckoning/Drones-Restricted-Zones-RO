@@ -19,10 +19,16 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const supa = require('./lib/supabase');
+const billing = require('./lib/stripe');
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
 const PORT = process.env.PORT || 3000;
+
+// The Stripe webhook must see the RAW request body to verify its signature, so
+// it is registered with express.raw BEFORE the JSON parser below consumes it.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), billingWebhookHandler);
+
+app.use(express.json({ limit: '1mb' }));
 
 const SOURCE_URL =
   process.env.ZONES_SOURCE_URL ||
@@ -181,7 +187,7 @@ async function requireUser(req, res, next) {
   }
 }
 
-app.get('/api/flights', requireUser, async (req, res) => {
+app.get('/api/flights', requireUser, requireEntitlement, async (req, res) => {
   const { data, error } = await req.db
     .from('flight_zones')
     .select('*')
@@ -190,7 +196,7 @@ app.get('/api/flights', requireUser, async (req, res) => {
   res.json({ flights: data });
 });
 
-app.post('/api/flights', requireUser, async (req, res) => {
+app.post('/api/flights', requireUser, requireEntitlement, async (req, res) => {
   const { name, geometry, overlap_zones, area_m2, dataset_valid_from } = req.body || {};
   if (!geometry || geometry.type !== 'Polygon' || !Array.isArray(geometry.coordinates)) {
     return res.status(400).json({ error: 'A GeoJSON Polygon geometry is required.' });
@@ -208,7 +214,7 @@ app.post('/api/flights', requireUser, async (req, res) => {
   res.status(201).json({ flight: data });
 });
 
-app.patch('/api/flights/:id', requireUser, async (req, res) => {
+app.patch('/api/flights/:id', requireUser, requireEntitlement, async (req, res) => {
   const name = req.body && typeof req.body.name === 'string' ? req.body.name.trim().slice(0, 120) : '';
   if (!name) return res.status(400).json({ error: 'A name is required.' });
   const { data, error } = await req.db
@@ -222,10 +228,218 @@ app.patch('/api/flights/:id', requireUser, async (req, res) => {
   res.json({ flight: data });
 });
 
-app.delete('/api/flights/:id', requireUser, async (req, res) => {
+app.delete('/api/flights/:id', requireUser, requireEntitlement, async (req, res) => {
   const { error } = await req.db.from('flight_zones').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).end();
+});
+
+// ---------------------------------------------------------------------------
+// Trial + billing entitlement (Phase 3)
+//
+// Access to pro features = an active 7-day trial OR an active subscription.
+// The trial is anchored to the account creation date and stored in the
+// `subscriptions` row; subscription state is written by the Stripe webhook.
+// ---------------------------------------------------------------------------
+
+const TRIAL_MS = 7 * 24 * 60 * 60 * 1000;
+const ACTIVE_SUB = new Set(['active', 'trialing']);
+
+function trialEndsFor(user) {
+  return new Date(new Date(user.created_at).getTime() + TRIAL_MS).toISOString();
+}
+
+// Ensure a subscriptions row exists (creates one with the trial window on first
+// sight). Uses the service role; returns null if that key isn't configured, in
+// which case the trial is derived from the account creation date instead.
+async function ensureBillingRow(user) {
+  const admin = supa.adminClient();
+  if (!admin) return null;
+  const { data } = await admin.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle();
+  if (data) return data;
+  const row = { user_id: user.id, trial_ends_at: trialEndsFor(user), updated_at: new Date().toISOString() };
+  const { data: inserted } = await admin.from('subscriptions').insert(row).select().maybeSingle();
+  return inserted || row;
+}
+
+function entitlementFor(user, row) {
+  const now = Date.now();
+  const trialEndsAt = (row && row.trial_ends_at) || trialEndsFor(user);
+  const trialActive = new Date(trialEndsAt).getTime() > now;
+  const status = (row && row.status) || null;
+  const subActive = ACTIVE_SUB.has(status);
+  return {
+    access: trialActive || subActive,
+    trialActive,
+    trialEndsAt,
+    daysLeft: Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - now) / (24 * 60 * 60 * 1000))),
+    subscription: row && row.stripe_subscription_id ? { status, plan: row.plan, currentPeriodEnd: row.current_period_end } : null,
+    billingConfigured: billing.configured(),
+  };
+}
+
+async function requireEntitlement(req, res, next) {
+  const row = await ensureBillingRow(req.user);
+  const ent = entitlementFor(req.user, row);
+  if (!ent.access) {
+    return res.status(402).json({ error: 'Your free trial has ended. Subscribe to use pro features.', entitlement: ent });
+  }
+  req.entitlement = ent;
+  next();
+}
+
+app.get('/api/account', requireUser, async (req, res) => {
+  const row = await ensureBillingRow(req.user);
+  res.json(entitlementFor(req.user, row));
+});
+
+function publicBase() {
+  return process.env.PUBLIC_URL || `http://localhost:${PORT}`;
+}
+
+async function getOrCreateCustomer(user) {
+  const admin = supa.adminClient();
+  const existing = admin ? (await admin.from('subscriptions').select('stripe_customer_id').eq('user_id', user.id).maybeSingle()).data : null;
+  if (existing && existing.stripe_customer_id) return existing.stripe_customer_id;
+  const customer = await billing.stripe.customers.create({ email: user.email, metadata: { user_id: user.id } });
+  if (admin) {
+    await admin.from('subscriptions').upsert({
+      user_id: user.id,
+      stripe_customer_id: customer.id,
+      trial_ends_at: trialEndsFor(user),
+      updated_at: new Date().toISOString(),
+    });
+  }
+  return customer.id;
+}
+
+app.post('/api/billing/checkout', requireUser, async (req, res) => {
+  if (!billing.configured()) return res.status(503).json({ error: 'Billing is not configured on this server.' });
+  const plan = req.body && req.body.plan === 'annual' ? 'annual' : 'monthly';
+  const price = plan === 'annual' ? billing.PRICE_ANNUAL : billing.PRICE_MONTHLY;
+  if (!price) return res.status(503).json({ error: 'Subscription prices are not configured.' });
+  try {
+    const customer = await getOrCreateCustomer(req.user);
+    const base = publicBase();
+    const session = await billing.stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer,
+      line_items: [{ price, quantity: 1 }],
+      client_reference_id: req.user.id,
+      subscription_data: { metadata: { user_id: req.user.id } },
+      allow_promotion_codes: true,
+      success_url: `${base}/?checkout=success`,
+      cancel_url: `${base}/?checkout=cancel`,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('[billing] checkout error:', err.message);
+    res.status(500).json({ error: 'Could not start checkout.' });
+  }
+});
+
+app.post('/api/billing/portal', requireUser, async (req, res) => {
+  if (!billing.configured()) return res.status(503).json({ error: 'Billing is not configured on this server.' });
+  const admin = supa.adminClient();
+  const row = admin ? (await admin.from('subscriptions').select('stripe_customer_id').eq('user_id', req.user.id).maybeSingle()).data : null;
+  if (!row || !row.stripe_customer_id) return res.status(400).json({ error: 'No billing account yet.' });
+  try {
+    const session = await billing.stripe.billingPortal.sessions.create({
+      customer: row.stripe_customer_id,
+      return_url: publicBase(),
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('[billing] portal error:', err.message);
+    res.status(500).json({ error: 'Could not open billing portal.' });
+  }
+});
+
+// Webhook handler (registered with express.raw near the top of the file).
+async function billingWebhookHandler(req, res) {
+  if (!billing.configured() || !billing.WEBHOOK_SECRET) return res.status(503).end();
+  let event;
+  try {
+    event = billing.stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], billing.WEBHOOK_SECRET);
+  } catch (err) {
+    console.warn('[webhook] signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed':
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted':
+        await syncSubscription(event);
+        break;
+      default:
+        break;
+    }
+    res.json({ received: true });
+  } catch (err) {
+    console.error('[webhook] handler error:', err.message);
+    res.status(500).end();
+  }
+}
+
+async function syncSubscription(event) {
+  const admin = supa.adminClient();
+  if (!admin) return;
+  let sub;
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    if (!session.subscription) return;
+    sub = await billing.stripe.subscriptions.retrieve(session.subscription);
+  } else {
+    sub = event.data.object;
+  }
+  let userId = sub.metadata && sub.metadata.user_id;
+  if (!userId) {
+    const { data } = await admin.from('subscriptions').select('user_id').eq('stripe_customer_id', sub.customer).maybeSingle();
+    userId = data && data.user_id;
+  }
+  if (!userId) {
+    console.warn('[webhook] could not map subscription', sub.id, 'to a user');
+    return;
+  }
+  await upsertSubscription(userId, sub);
+}
+
+// Write a Stripe subscription object into our subscriptions table (service role).
+async function upsertSubscription(userId, sub) {
+  const admin = supa.adminClient();
+  if (!admin) return;
+  const priceId = sub.items && sub.items.data && sub.items.data[0] && sub.items.data[0].price && sub.items.data[0].price.id;
+  const plan = priceId === billing.PRICE_ANNUAL ? 'annual' : priceId === billing.PRICE_MONTHLY ? 'monthly' : null;
+  await admin.from('subscriptions').upsert({
+    user_id: userId,
+    stripe_customer_id: sub.customer,
+    stripe_subscription_id: sub.id,
+    status: sub.status,
+    plan,
+    current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+// Pull the caller's latest subscription from Stripe and persist it. Called by the
+// frontend right after a successful checkout so access unlocks without waiting on
+// the webhook (webhooks still handle later lifecycle changes).
+app.post('/api/billing/sync', requireUser, async (req, res) => {
+  if (!billing.configured()) return res.status(503).json({ error: 'Billing is not configured on this server.' });
+  const admin = supa.adminClient();
+  const row = admin ? (await admin.from('subscriptions').select('stripe_customer_id').eq('user_id', req.user.id).maybeSingle()).data : null;
+  if (!row || !row.stripe_customer_id) return res.json({ synced: false });
+  try {
+    const subs = await billing.stripe.subscriptions.list({ customer: row.stripe_customer_id, status: 'all', limit: 1 });
+    const sub = subs.data[0];
+    if (sub) await upsertSubscription(req.user.id, sub);
+    res.json({ synced: Boolean(sub) });
+  } catch (err) {
+    console.error('[billing] sync error:', err.message);
+    res.status(500).json({ error: 'Sync failed.' });
+  }
 });
 
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
@@ -234,4 +448,5 @@ app.listen(PORT, () => {
   console.log(`Drones Restricted Zones RO running at http://localhost:${PORT}`);
   console.log(`Zones source: ${SOURCE_URL}`);
   console.log(`Accounts (Supabase): ${supa.isConfigured() ? 'configured' : 'NOT configured (account features disabled)'}`);
+  console.log(`Billing (Stripe): ${billing.configured() ? 'configured' : 'NOT configured (trial-only / no paywall)'}`);
 });

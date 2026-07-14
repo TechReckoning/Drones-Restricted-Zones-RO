@@ -2,6 +2,7 @@
 // rename / delete previously saved zones. Talks to /api/flights (auth required).
 
 import { auth, closeModals, openModal, toast } from './auth.js';
+import { billing } from './billing.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -53,6 +54,13 @@ export const history = {
 async function refreshList() {
   el('history-list').innerHTML = '<p class="hint">Loading…</p>';
   const res = await api('/api/flights');
+  if (res.status === 402) {
+    el('history-list').innerHTML =
+      '<p class="hint">Your free trial has ended. Subscribe to access your saved flying zones. ' +
+      '<button id="history-subscribe" class="btn btn-mini btn-primary">Subscribe</button></p>';
+    el('history-subscribe')?.addEventListener('click', () => { closeModals(); billing.openSubscribe(); });
+    return;
+  }
   if (!res.ok) {
     el('history-list').innerHTML = '<p class="hint">Could not load your history.</p>';
     return;
