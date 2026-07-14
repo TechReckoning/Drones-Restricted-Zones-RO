@@ -154,22 +154,7 @@ app.get('/api/zones', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  // env presence flags — booleans only, never values (safe to expose for ops).
-  res.json({
-    ok: true,
-    cached: Boolean(cache.data),
-    cachedAt: cache.ts ? new Date(cache.ts).toISOString() : null,
-    env: {
-      PUBLIC_URL: process.env.PUBLIC_URL || null,
-      SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
-      SUPABASE_ANON_KEY: Boolean(process.env.SUPABASE_ANON_KEY),
-      SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      STRIPE_SECRET_KEY: Boolean(process.env.STRIPE_SECRET_KEY),
-      STRIPE_PRICE_MONTHLY: Boolean(process.env.STRIPE_PRICE_MONTHLY),
-      STRIPE_PRICE_ANNUAL: Boolean(process.env.STRIPE_PRICE_ANNUAL),
-      STRIPE_WEBHOOK_SECRET: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
-    },
-  });
+  res.json({ ok: true, cached: Boolean(cache.data), cachedAt: cache.ts ? new Date(cache.ts).toISOString() : null });
 });
 
 // ---------------------------------------------------------------------------
