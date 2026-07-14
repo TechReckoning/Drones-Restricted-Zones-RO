@@ -31,6 +31,7 @@
       <span id="user-email" class="user-email hidden"></span>
       <button id="library-btn" class="btn btn-ghost hidden" title="Your operator profile, pilots and drones">👤 Profile</button>
       <button id="history-btn" class="btn btn-ghost hidden" title="Your saved flying zones">🗂 My zones</button>
+      <button id="requests-btn" class="btn btn-ghost hidden" title="Your generated flight requests">📄 Requests</button>
       <button id="auth-btn" class="btn btn-primary">Sign in</button>
     </div>
   </header>
@@ -61,6 +62,7 @@
 
           <button id="export-kml-btn" class="btn btn-primary btn-block">⬇ Export flying zone (.KML)</button>
           <button id="save-flight-btn" class="btn btn-ghost btn-block hidden">💾 Save to my history</button>
+          <button id="request-btn" class="btn btn-ghost btn-block hidden">📄 Generate flight request</button>
 
           <section class="subsection">
             <h3>Coordinates <span class="muted">(lat, lon — WGS84)</span>
@@ -168,6 +170,24 @@
     </div>
   </div>
 
+  <!-- Flight-request wizard -->
+  <div id="request-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2>Generate flight request</h2>
+      <div id="request-body"></div>
+    </div>
+  </div>
+
+  <!-- Generated requests history -->
+  <div id="requests-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2>My flight requests</h2>
+      <div id="requests-list" class="history-list"></div>
+    </div>
+  </div>
+
   <!-- Cookie notice -->
   <div id="cookie-banner" class="cookie-banner hidden">
     <span>We use only essential cookies to sign you in and process payments — no tracking.
@@ -188,6 +208,10 @@
   <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
   <!-- Turf.js (geometry / overlap analysis) -->
   <script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
+  <!-- pdf-lib + fontkit (fills the official ROMATSA AcroForm PDFs client-side,
+       baking appearances with an embedded Unicode font for Romanian diacritics) -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
 
   <script type="module" src="js/app.js"></script>
 </body>

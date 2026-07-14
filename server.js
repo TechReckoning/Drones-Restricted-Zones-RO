@@ -294,6 +294,8 @@ function registerLibraryCrud(path, table, fields) {
 
 registerLibraryCrud('pilots', 'pilots', ['name', 'phone', 'qualifications']);
 registerLibraryCrud('drones', 'drones', ['registration', 'serial', 'manufacturer', 'model', 'operating_class', 'category', 'operator_code', 'mtom_kg']);
+// Saved flight-request history (Phase B). `fields` is the jsonb PDF field map.
+registerLibraryCrud('requests', 'flight_requests', ['form_type', 'label', 'fields']);
 
 // ---------------------------------------------------------------------------
 // Trial + billing entitlement (Phase 3)

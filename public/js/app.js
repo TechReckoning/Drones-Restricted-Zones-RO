@@ -3,6 +3,7 @@ import { auth } from './auth.js';
 import { history } from './history.js';
 import { billing } from './billing.js';
 import { library } from './library.js';
+import { request } from './request-form.js';
 import './consent.js';
 
 /* ------------------------------------------------------------------ *
@@ -54,6 +55,7 @@ const els = {
   statOverlaps: $('stat-overlaps'),
   exportBtn: $('export-kml-btn'),
   saveBtn: $('save-flight-btn'),
+  requestBtn: $('request-btn'),
   coordsList: $('coords-list'),
   copyCoordsBtn: $('copy-coords-btn'),
   overlapList: $('overlap-list'),
@@ -273,7 +275,10 @@ function attachFlightLayer(layer, { fit = false } = {}) {
   els.editBtn.disabled = false;
   els.clearBtn.disabled = false;
   els.summary.classList.remove('hidden');
-  if (auth.configured) els.saveBtn.classList.remove('hidden');
+  if (auth.configured) {
+    els.saveBtn.classList.remove('hidden');
+    els.requestBtn.classList.remove('hidden');
+  }
   analyzeFlight();
   if (fit) map.fitBounds(layer.getBounds(), { padding: [50, 50] });
 }
@@ -308,6 +313,7 @@ function clearFlight() {
   clearOverlaps();
   els.summary.classList.add('hidden');
   els.saveBtn.classList.add('hidden');
+  els.requestBtn.classList.add('hidden');
   els.editBtn.disabled = true;
   els.clearBtn.disabled = true;
   els.editBtn.textContent = 'Edit';
@@ -541,8 +547,22 @@ auth.init().then(() => {
   });
   billing.init();
   library.init();
-  // Reveal the save button if the user signs in while a zone is already drawn.
+  request.init({
+    getFlight: () => state.lastFlight
+      ? {
+          geometry: state.lastFlight.geometry,
+          overlaps: (state.lastOverlaps || []).map((o) => ({
+            zone_id: o.feature.properties.zone_id,
+            contact: o.feature.properties.contact,
+          })),
+        }
+      : null,
+  });
+  // Reveal the save/request buttons if the user signs in while a zone is drawn.
   auth.onChange(() => {
-    if (state.flightLayer && auth.configured) els.saveBtn.classList.remove('hidden');
+    if (state.flightLayer && auth.configured) {
+      els.saveBtn.classList.remove('hidden');
+      els.requestBtn.classList.remove('hidden');
+    }
   });
 });
