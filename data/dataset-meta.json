@@ -1,0 +1,11 @@
+{
+  "currentValidFrom": "2026-04-30",
+  "versions": [
+    {
+      "validFrom": "2026-04-30",
+      "note": "ROMATSA UAV restricted-zones update",
+      "newZones": ["RZ 1076", "RZ 1077"],
+      "removedZones": []
+    }
+  ]
+}

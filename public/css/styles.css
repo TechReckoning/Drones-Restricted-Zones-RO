@@ -62,6 +62,43 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .badge-snapshot { background: #78350f; color: #fed7aa; }
 .badge-error { background: #7f1d1d; color: #fecaca; }
 
+/* Dataset provenance + "new zones" filter chip (header) */
+.valid-from {
+  font-size: 12px;
+  color: #cbd5e1;
+  background: #1e293b;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.chip {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #0891b2;
+  background: rgba(8, 145, 178, 0.18);
+  color: #67e8f9;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip:hover { background: rgba(8, 145, 178, 0.32); }
+.chip.active { background: #06b6d4; color: #06232b; border-color: #06b6d4; }
+
+/* "NEW" pill on newly-added zones in the list */
+.new-pill {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #fff;
+  background: #0891b2;
+  padding: 1px 5px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
 /* ---------- Layout ---------- */
 .layout { flex: 1 1 auto; display: flex; min-height: 0; }
 

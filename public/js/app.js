@@ -9,11 +9,14 @@ import { buildKml, downloadKml } from './kml.js';
  *   - KML export of the flying zone
  * ------------------------------------------------------------------ */
 
+// dashArray is set explicitly on every style (incl. null) so setStyle() reliably
+// clears the dashes when a "new" zone becomes selected/overlap.
 const STYLE = {
-  base:     { color: '#2563eb', weight: 1, opacity: 0.7, fillColor: '#3b82f6', fillOpacity: 0.10 },
-  selected: { color: '#f97316', weight: 3, opacity: 1,   fillColor: '#f97316', fillOpacity: 0.35 },
-  overlap:  { color: '#dc2626', weight: 2, opacity: 1,   fillColor: '#dc2626', fillOpacity: 0.30 },
-  flight:   { color: '#16a34a', weight: 2, opacity: 1,   fillColor: '#16a34a', fillOpacity: 0.20 },
+  base:     { color: '#2563eb', weight: 1, opacity: 0.7, fillColor: '#3b82f6', fillOpacity: 0.10, dashArray: null },
+  selected: { color: '#f97316', weight: 3, opacity: 1,   fillColor: '#f97316', fillOpacity: 0.35, dashArray: null },
+  overlap:  { color: '#dc2626', weight: 2, opacity: 1,   fillColor: '#dc2626', fillOpacity: 0.30, dashArray: null },
+  flight:   { color: '#16a34a', weight: 2, opacity: 1,   fillColor: '#16a34a', fillOpacity: 0.20, dashArray: null },
+  isNew:    { color: '#0891b2', weight: 3, opacity: 1,   fillColor: '#06b6d4', fillOpacity: 0.25, dashArray: '5,4' },
 };
 
 // zone key -> { feature, layer, item, bbox, searchText }
@@ -22,12 +25,16 @@ const state = {
   selectedId: null,
   overlapIds: new Set(),
   flightLayer: null,
+  newZones: new Set(), // zone_ids added in the current dataset version
+  newOnly: false,      // "New (N)" chip filter active
 };
 
 // ---- DOM refs ----
 const $ = (id) => document.getElementById(id);
 const els = {
   status: $('data-status'),
+  validFrom: $('valid-from'),
+  newChip: $('new-chip'),
   refresh: $('refresh-btn'),
   zoneList: $('zone-list'),
   zoneCount: $('zone-count'),
@@ -72,11 +79,15 @@ async function loadZones({ refresh = false } = {}) {
     zonesGroup.clearLayers();
     state.selectedId = null;
     state.overlapIds.clear();
+    // Must be set BEFORE addData so registerZone/styleFor can flag new zones.
+    state.newZones = new Set((meta && meta.dataset && meta.dataset.newZones) || []);
+    state.datasetValidFrom = (meta && meta.dataset && meta.dataset.validFrom) || null;
     zonesGroup.addData(geojson);
 
     renderZoneList();
     els.zoneCount.textContent = zones.size;
     applyStatusMeta(meta);
+    renderDatasetInfo(meta);
   } catch (err) {
     console.error(err);
     setStatus('error', 'Failed to load zones');
@@ -91,11 +102,13 @@ function registerZone(feature, layer) {
     feature,
     layer,
     item: null,
+    isNew: state.newZones.has(p.zone_id),
     bbox: turf.bbox(feature), // [minX, minY, maxX, maxY]
     searchText: `${p.zone_id || ''} ${p.contact || ''} ${p.lower_lim || ''} ${p.upper_lim || ''}`.toLowerCase(),
   };
   zones.set(key, record);
 
+  layer.setStyle(styleFor(key)); // paints new zones with the "new" style up front
   layer.bindPopup(popupHtml(feature), { maxWidth: 280 });
   layer.on('click', () => selectZone(key, { pan: false }));
 }
@@ -115,8 +128,11 @@ function renderZoneList() {
   const html = sorted
     .map(([key, r]) => {
       const p = r.feature.properties || {};
-      return `<div class="zone-item" data-id="${escapeHtml(key)}" role="option">
-        <div class="zi-title"><span>${escapeHtml(p.zone_id || '—')}</span>
+      const newPill = r.isNew
+        ? ` <span class="new-pill" title="Added ${escapeHtml(state.datasetValidFrom || '')}">NEW</span>`
+        : '';
+      return `<div class="zone-item${r.isNew ? ' is-new' : ''}" data-id="${escapeHtml(key)}" role="option">
+        <div class="zi-title"><span>${escapeHtml(p.zone_id || '—')}${newPill}</span>
           <span class="zi-alt">${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}</span></div>
         <div class="zi-contact">${escapeHtml(p.contact || '')}</div>
       </div>`;
@@ -137,18 +153,44 @@ els.zoneList.addEventListener('click', (e) => {
   if (item) selectZone(item.dataset.id, { pan: true });
 });
 
-// Search / filter.
-els.search.addEventListener('input', () => {
+// Search / filter (text search + "New only" chip combine).
+function applyZoneFilter() {
   const q = els.search.value.trim().toLowerCase();
   let visible = 0;
   zones.forEach((r) => {
     if (!r.item) return;
-    const show = !q || r.searchText.includes(q);
+    const show = (!q || r.searchText.includes(q)) && (!state.newOnly || r.isNew);
     r.item.classList.toggle('hidden', !show);
     if (show) visible++;
   });
-  els.zoneCount.textContent = q ? `${visible}/${zones.size}` : zones.size;
+  const filtered = q || state.newOnly;
+  els.zoneCount.textContent = filtered ? `${visible}/${zones.size}` : String(zones.size);
+}
+
+els.search.addEventListener('input', () => {
+  // Typing in the search box clears the "New only" filter for clarity.
+  if (state.newOnly) {
+    state.newOnly = false;
+    els.newChip.classList.remove('active');
+  }
+  applyZoneFilter();
 });
+
+els.newChip.addEventListener('click', () => {
+  state.newOnly = !state.newOnly;
+  els.newChip.classList.toggle('active', state.newOnly);
+  els.search.value = '';
+  applyZoneFilter();
+  if (state.newOnly) zoomToNewZones();
+});
+
+function zoomToNewZones() {
+  const bounds = L.latLngBounds([]);
+  zones.forEach((r) => {
+    if (r.isNew) bounds.extend(r.layer.getBounds());
+  });
+  if (bounds.isValid()) map.fitBounds(bounds, { maxZoom: 11, padding: [60, 60] });
+}
 
 // =================================================================== //
 //  Selection & styling
@@ -156,6 +198,8 @@ els.search.addEventListener('input', () => {
 function styleFor(id) {
   if (id === state.selectedId) return STYLE.selected;
   if (state.overlapIds.has(id)) return STYLE.overlap;
+  const r = zones.get(id);
+  if (r && r.isNew) return STYLE.isNew;
   return STYLE.base;
 }
 
@@ -412,6 +456,31 @@ function applyStatusMeta(meta) {
       return setStatus('snapshot', `⚠ Offline snapshot · ${meta.count} zones`);
     default:
       return setStatus('live', `${meta.count} zones · ${when}`);
+  }
+}
+
+// Header dataset provenance: "Valid from <date>" + the "New (N)" filter chip.
+function renderDatasetInfo(meta) {
+  const ds = (meta && meta.dataset) || {};
+  const fetched = meta && meta.fetchedAt ? new Date(meta.fetchedAt).toLocaleString() : null;
+  if (ds.validFrom) {
+    els.validFrom.textContent = `📅 Valid from ${ds.validFrom}`;
+    els.validFrom.title = fetched
+      ? `ROMATSA dataset effective ${ds.validFrom} · fetched ${fetched}`
+      : `ROMATSA dataset effective ${ds.validFrom}`;
+    els.validFrom.classList.remove('hidden');
+  } else {
+    els.validFrom.classList.add('hidden');
+  }
+
+  const n = state.newZones.size;
+  if (n > 0) {
+    els.newChip.textContent = `✨ New (${n})`;
+    els.newChip.classList.remove('hidden');
+  } else {
+    els.newChip.classList.add('hidden');
+    state.newOnly = false;
+    els.newChip.classList.remove('active');
   }
 }
 

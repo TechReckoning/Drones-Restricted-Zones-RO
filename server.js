@@ -23,11 +23,35 @@ const SOURCE_URL =
   process.env.ZONES_SOURCE_URL ||
   'https://flightplan.romatsa.ro/init/static/zone_restrictionate_uav.json';
 const SNAPSHOT_PATH = path.join(__dirname, 'data', 'zones.snapshot.json');
+const DATASET_META_PATH = path.join(__dirname, 'data', 'dataset-meta.json');
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const FETCH_TIMEOUT_MS = 20 * 1000;
 
 /** @type {{ data: any, ts: number }} */
 let cache = { data: null, ts: 0 };
+
+/**
+ * Manually-maintained dataset provenance (the ROMATSA feed itself carries no
+ * effective-date field). Loaded once at startup; the file changes rarely and is
+ * edited by hand when a new AIRAC-style update lands.
+ * @returns {{ validFrom: string|null, newZones: string[] }}
+ */
+function loadDatasetInfo() {
+  try {
+    const meta = JSON.parse(fs.readFileSync(DATASET_META_PATH, 'utf8'));
+    const versions = Array.isArray(meta.versions) ? meta.versions : [];
+    const current =
+      versions.find((v) => v.validFrom === meta.currentValidFrom) || versions[0] || null;
+    return {
+      validFrom: meta.currentValidFrom || (current && current.validFrom) || null,
+      newZones: (current && Array.isArray(current.newZones) && current.newZones) || [],
+    };
+  } catch (err) {
+    console.warn('[dataset-meta] could not read metadata:', err.message);
+    return { validFrom: null, newZones: [] };
+  }
+}
+const datasetInfo = loadDatasetInfo();
 
 function isFeatureCollection(json) {
   return (
@@ -77,7 +101,7 @@ app.get('/api/zones', async (req, res) => {
 
   if (!force && cache.data && now - cache.ts < CACHE_TTL_MS) {
     return res.json({
-      meta: { source: 'live-cache', fetchedAt: new Date(cache.ts).toISOString(), count: cache.data.features.length },
+      meta: { source: 'live-cache', fetchedAt: new Date(cache.ts).toISOString(), count: cache.data.features.length, dataset: datasetInfo },
       geojson: cache.data,
     });
   }
@@ -87,7 +111,7 @@ app.get('/api/zones', async (req, res) => {
     cache = { data: json, ts: now };
     writeSnapshot(json); // fire-and-forget refresh of the offline fallback
     return res.json({
-      meta: { source: 'live', fetchedAt: new Date(now).toISOString(), count: json.features.length },
+      meta: { source: 'live', fetchedAt: new Date(now).toISOString(), count: json.features.length, dataset: datasetInfo },
       geojson: json,
     });
   } catch (err) {
@@ -95,14 +119,14 @@ app.get('/api/zones', async (req, res) => {
     // Prefer an in-memory cached copy over disk if we have one.
     if (cache.data) {
       return res.json({
-        meta: { source: 'stale-cache', fetchedAt: new Date(cache.ts).toISOString(), count: cache.data.features.length, warning: err.message },
+        meta: { source: 'stale-cache', fetchedAt: new Date(cache.ts).toISOString(), count: cache.data.features.length, warning: err.message, dataset: datasetInfo },
         geojson: cache.data,
       });
     }
     try {
       const snap = await readSnapshot();
       return res.json({
-        meta: { source: 'snapshot', fetchedAt: null, count: snap.features.length, warning: err.message },
+        meta: { source: 'snapshot', fetchedAt: null, count: snap.features.length, warning: err.message, dataset: datasetInfo },
         geojson: snap,
       });
     } catch (snapErr) {
