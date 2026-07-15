@@ -478,6 +478,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .plan-card:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 .plan-card:disabled:hover { border-color: var(--panel-border); box-shadow: none; }
 
+.rq-warn { color: var(--danger); font-weight: 600; }
+
 /* ---------- Utility ---------- */
 .hidden { display: none !important; }
 

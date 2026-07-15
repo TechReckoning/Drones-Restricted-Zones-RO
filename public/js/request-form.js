@@ -82,33 +82,46 @@ export const request = {
 // ---------- wizard ----------
 function renderWizard(flight) {
   const overlaps = flight.overlaps || [];
-  const suggestedType = overlaps.length ? 'solicitare' : 'informare';
   const suggestedTwr = overlaps.length ? towerFromContact(overlaps[0].contact) : '';
   const op = libraryData.operator;
-  const radiusM = circleFromFlight(flight.geometry, flight.circle).radius_m;
+
+  // The coordinates section is filled according to what the user drew: a circle
+  // goes in the circular section; a polygon with ≤5 vertices in the polygon
+  // section; a polygon with >5 vertices leaves that section blank (the form only
+  // has room for 5 points), which we warn about here.
+  const isCircle = !!flight.circle;
+  const polyPts = isCircle ? [] : polygonPoints(flight.geometry);
+  let areaHint;
+  if (isCircle) {
+    const r = circleFromFlight(flight.geometry, flight.circle).radius_m;
+    areaHint = `The flight area will be filled in the form's <strong>circular</strong> section (center + radius ≈ <strong>${r} m</strong>).`;
+  } else if (polyPts.length <= 5) {
+    areaHint = `The flight area (<strong>${polyPts.length}</strong> point${polyPts.length === 1 ? '' : 's'}) will be filled in the form's <strong>polygon</strong> section.`;
+  } else {
+    areaHint = `<span class="rq-warn">⚠ Your polygon has <strong>${polyPts.length}</strong> vertices, but the form's polygon section holds at most <strong>5</strong>. The coordinates section will be left <strong>blank</strong> — reduce the polygon to 5 points or fewer, or draw a circle, to include the flight area.</span>`;
+  }
 
   const opts = (arr, sel) => arr.map((o) => `<option value="${escapeHtml(o[0])}"${o[0] === sel ? ' selected' : ''}>${escapeHtml(o[1])}</option>`).join('');
   const pilotOpts = libraryData.pilots.map((p) => `<option value="${p.id}">${escapeHtml(p.name || 'Unnamed')}</option>`).join('');
   const droneOpts = libraryData.drones.map((d) => `<option value="${d.id}">${escapeHtml([d.manufacturer, d.model].filter(Boolean).join(' ') || d.registration || 'Drone')}</option>`).join('');
-  const rzOpts = overlaps.map((o) => `<option value="${escapeHtml(o.zone_id)}">${escapeHtml(o.zone_id)}</option>`).join('');
+  const rzList = overlaps.map((o) => `<option value="${escapeHtml(stripRZ(o.zone_id))}"></option>`).join('');
 
   el('request-body').innerHTML = `
-    <p class="hint">${overlaps.length
-      ? `Your zone overlaps <strong>${overlaps.length}</strong> restricted zone(s) → <strong>Anexa 2 (Solicitare autorizare)</strong> suggested.`
-      : 'No restricted-zone overlap → <strong>Anexa 1 (Informare)</strong> suggested.'}
-      The flight area is filled as a circle (center + radius ≈ <strong>${radiusM} m</strong>).</p>
+    <p class="hint">${areaHint}</p>
+    <p class="hint">Choose which request you're submitting — this is your decision as the operator.</p>
     ${op && op.operator_name ? '' : '<p class="hint" style="color:var(--warn)">⚠ No operator profile yet — open “👤 Profile” to fill it; operator fields will be blank otherwise.</p>'}
     ${libraryData.drones.length ? '' : '<p class="hint" style="color:var(--warn)">⚠ No drones saved — add one under “👤 Profile”.</p>'}
 
     <div class="lib-form">
-      <label class="lib-field"><span>Form type</span><select id="rq_type">
-        <option value="informare"${suggestedType === 'informare' ? ' selected' : ''}>Anexa 1 — Informare (open category)</option>
-        <option value="solicitare"${suggestedType === 'solicitare' ? ' selected' : ''}>Anexa 2 — Solicitare autorizare (restricted zone)</option>
+      <label class="lib-field"><span>Request type</span><select id="rq_type">
+        <option value="">— Select the request type —</option>
+        <option value="informare">Anexa 1 — Informare (open category in CTR)</option>
+        <option value="solicitare">Anexa 2 — Solicitare autorizare (restricted zone)</option>
       </select></label>
       <label class="lib-field"><span>Tower / CTR</span><select id="rq_twr">${opts(TOWERS, suggestedTwr)}</select></label>
       <label class="lib-field"><span>Pilot</span><select id="rq_pilot"><option value="">—</option>${pilotOpts}</select></label>
       <label class="lib-field"><span>Drone</span><select id="rq_drone"><option value="">—</option>${droneOpts}</select></label>
-      <label class="lib-field rq-solicitare"><span>Restricted zone (RZ)</span><select id="rq_rz">${rzOpts}</select></label>
+      <label class="lib-field rq-solicitare"><span>Restricted zone (RZ)</span><input id="rq_rz" type="text" list="rq-rz-list" value="${overlaps.length ? escapeHtml(stripRZ(overlaps[0].zone_id)) : ''}" /><datalist id="rq-rz-list">${rzList}</datalist></label>
       <label class="lib-field rq-solicitare"><span>Institution aviz (ref.)</span><input id="rq_aviz" type="text" /></label>
       <label class="lib-field"><span>Purpose (scopul zborului)</span><input id="rq_scop" type="text" /></label>
       <label class="lib-field"><span>Operation mode</span><select id="rq_mode"><option value="VLOS">VLOS</option><option value="BVLOS">BVLOS</option></select></label>
@@ -144,13 +157,44 @@ function circleFromFlight(geometry, circle) {
   return { center, radius_m: Math.max(1, Math.ceil(rkm * 1000)) };
 }
 
+// Distinct polygon vertices ([lng, lat]) without the closing duplicate.
+function polygonPoints(geometry) {
+  const ring = (geometry && geometry.coordinates && geometry.coordinates[0]) || [];
+  if (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) {
+    return ring.slice(0, -1);
+  }
+  return ring.slice();
+}
+
+// Fill the coordinates section matching the drawn shape: circular for a circle;
+// polygon (points 1..N) for a polygon with ≤5 vertices; nothing for a polygon
+// with >5 vertices (the form's polygon section only holds 5 points).
+function coordinateFields(flight) {
+  if (flight.circle) {
+    const { center, radius_m } = circleFromFlight(flight.geometry, flight.circle);
+    const clat = decimalToDMS(center[1]), clon = decimalToDMS(center[0]);
+    return {
+      gr_center_lat: String(clat.d), min_center_lat: String(clat.m), sec_center_lat: String(clat.s),
+      gr_center_long: String(clon.d), min_center_long: String(clon.m), sec_center_long: String(clon.s),
+      raza: String(radius_m),
+    };
+  }
+  const pts = polygonPoints(flight.geometry);
+  if (pts.length > 5) return {};
+  const out = {};
+  pts.forEach(([lng, lat], i) => {
+    const n = i + 1, dlat = decimalToDMS(lat), dlon = decimalToDMS(lng);
+    out[`gr${n}_lat`] = String(dlat.d); out[`min${n}_lat`] = String(dlat.m); out[`sec${n}_lat`] = String(dlat.s);
+    out[`gr${n}_long`] = String(dlon.d); out[`min${n}_long`] = String(dlon.m); out[`sec${n}_long`] = String(dlon.s);
+  });
+  return out;
+}
+
 function buildFields(flight) {
   const type = el('rq_type').value;
   const op = libraryData.operator || {};
   const pilot = libraryData.pilots.find((p) => p.id === el('rq_pilot').value) || {};
   const drone = libraryData.drones.find((d) => d.id === el('rq_drone').value) || {};
-  const { center, radius_m } = circleFromFlight(flight.geometry, flight.circle);
-  const clat = decimalToDMS(center[1]), clon = decimalToDMS(center[0]);
   const v = (id) => (el(id) ? el(id).value.trim() : '');
 
   const text = {
@@ -160,9 +204,7 @@ function buildFields(flight) {
     Nume_pilot: pilot.name, telefon_pilot: pilot.phone,
     scop_zbor: v('rq_scop'), localitatea: v('rq_loc'), inaltime_zbor: v('rq_height'),
     data_zbor: v('rq_date'), data_zbor_end: v('rq_date_end'), ora_start: v('rq_ora'), 'ora_finală': v('rq_ora_end'),
-    gr_center_lat: String(clat.d), min_center_lat: String(clat.m), sec_center_lat: String(clat.s),
-    gr_center_long: String(clon.d), min_center_long: String(clon.m), sec_center_long: String(clon.s),
-    raza: String(radius_m),
+    ...coordinateFields(flight),
   };
   // Baked appearances render the /V text directly, so use readable values (the
   // drone's real class, VLOS/BVLOS) rather than the form's quirky export codes.
@@ -219,6 +261,10 @@ async function fillPdf(type, text, dropdowns) {
 }
 
 async function generate(flight) {
+  if (!el('rq_type').value) {
+    el('rq_status').textContent = 'Please choose the request type (Anexa 1 or Anexa 2) first.';
+    return;
+  }
   const { type, text, dropdowns, label } = buildFields(flight);
   el('rq_status').textContent = 'Generating…';
   let bytes;
