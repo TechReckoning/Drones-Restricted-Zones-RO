@@ -46,12 +46,22 @@
       <div class="panel-body">
         <div id="billing-banner" class="billing-banner hidden"></div>
         <div class="draw-controls">
-          <button id="draw-btn" class="btn btn-primary">✏️ Draw flying zone</button>
+          <button id="draw-btn" class="btn btn-primary">✏️ Polygon</button>
+          <button id="draw-circle-btn" class="btn btn-primary">⭕ Circle</button>
           <button id="edit-btn" class="btn btn-ghost" disabled>Edit</button>
           <button id="clear-btn" class="btn btn-ghost" disabled>Clear</button>
         </div>
-        <p class="hint" id="draw-hint">Click <strong>Draw flying zone</strong>, then click on the map to
-          place the corners of your planned flight area. Double-click (or click the first point) to finish.</p>
+        <div id="circle-radius-row" class="circle-radius-row hidden">
+          <label for="circle-radius">Radius</label>
+          <input id="circle-radius" type="number" min="0" step="any" />
+          <select id="circle-radius-unit">
+            <option value="m">m</option>
+            <option value="km">Km</option>
+            <option value="NM">NM</option>
+          </select>
+        </div>
+        <p class="hint" id="draw-hint">Draw a <strong>polygon</strong> (click corners, double-click to finish)
+          or a <strong>circle</strong> (click a center, then click to set the radius — adjust it exactly below).</p>
 
         <div id="flight-summary" class="flight-summary hidden">
           <div class="stat-row">

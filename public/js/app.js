@@ -31,9 +31,14 @@ const state = {
   selectedId: null,
   overlapIds: new Set(),
   flightLayer: null,
+  flightShape: null,   // 'polygon' | 'circle'
+  circle: null,        // { center: [lng, lat], radius_m } when flightShape === 'circle'
   newZones: new Set(), // zone_ids added in the current dataset version
   newOnly: false,      // "New (N)" chip filter active
 };
+
+// Radius unit → metres.
+const RADIUS_UNIT_M = { m: 1, km: 1000, NM: 1852 };
 
 // ---- DOM refs ----
 const $ = (id) => document.getElementById(id);
@@ -46,6 +51,10 @@ const els = {
   zoneCount: $('zone-count'),
   search: $('zone-search'),
   drawBtn: $('draw-btn'),
+  drawCircleBtn: $('draw-circle-btn'),
+  circleRadiusRow: $('circle-radius-row'),
+  circleRadius: $('circle-radius'),
+  circleRadiusUnit: $('circle-radius-unit'),
   editBtn: $('edit-btn'),
   clearBtn: $('clear-btn'),
   drawHint: $('draw-hint'),
@@ -257,24 +266,38 @@ els.drawBtn.addEventListener('click', () => {
   els.drawHint.textContent = 'Click on the map to add corners. Double-click the last point (or click the first) to finish.';
 });
 
+els.drawCircleBtn.addEventListener('click', () => {
+  if (!billing.ensurePro()) return;
+  map.pm.enableDraw('Circle', { snappable: true, hintlineStyle: STYLE.flight });
+  els.drawHint.textContent = 'Click a center point on the map, then click again to set the radius. Fine-tune the radius below.';
+});
+
 map.pm.setGlobalOptions({ pathOptions: STYLE.flight });
 
 map.on('pm:create', (e) => {
-  if (e.shape !== 'Polygon') return;
-  attachFlightLayer(e.layer);
+  if (e.shape === 'Circle') activateFlight(e.layer, 'circle');
+  else if (e.shape === 'Polygon') activateFlight(e.layer, 'polygon');
 });
 
-// Shared setup for a flying-zone layer, whether freshly drawn or reloaded from
-// saved history.
-function attachFlightLayer(layer, { fit = false } = {}) {
+// Shared setup for the active flying-zone layer (freshly drawn or reloaded).
+function activateFlight(layer, shape, { fit = false } = {}) {
   if (state.flightLayer) map.removeLayer(state.flightLayer);
   state.flightLayer = layer;
+  state.flightShape = shape;
   layer.setStyle(STYLE.flight);
-  layer.on('pm:edit', analyzeFlight);
-  layer.on('pm:markerdragend', analyzeFlight);
+  layer.on('pm:edit', onFlightEdit);
+  layer.on('pm:markerdragend', onFlightEdit);
   els.editBtn.disabled = false;
   els.clearBtn.disabled = false;
   els.summary.classList.remove('hidden');
+  els.circleRadiusRow.classList.toggle('hidden', shape !== 'circle');
+  if (shape === 'circle') {
+    const c = layer.getLatLng();
+    state.circle = { center: [c.lng, c.lat], radius_m: layer.getRadius() };
+    showRadiusInUnit();
+  } else {
+    state.circle = null;
+  }
   if (auth.configured) {
     els.saveBtn.classList.remove('hidden');
     els.requestBtn.classList.remove('hidden');
@@ -283,14 +306,41 @@ function attachFlightLayer(layer, { fit = false } = {}) {
   if (fit) map.fitBounds(layer.getBounds(), { padding: [50, 50] });
 }
 
+// Keep the circle model in sync when the layer is edited (center dragged / radius resized).
+function onFlightEdit() {
+  if (state.flightShape === 'circle' && state.flightLayer) {
+    const c = state.flightLayer.getLatLng();
+    state.circle = { center: [c.lng, c.lat], radius_m: state.flightLayer.getRadius() };
+    showRadiusInUnit();
+  }
+  analyzeFlight();
+}
+
 // Reload a saved GeoJSON Polygon back onto the map as the active flying zone.
 function loadSavedFlight(geometry) {
   const ring = (geometry && geometry.coordinates && geometry.coordinates[0]) || [];
   const latlngs = ring.map(([lng, lat]) => [lat, lng]);
   if (latlngs.length < 3) return;
   const layer = L.polygon(latlngs).addTo(map);
-  attachFlightLayer(layer, { fit: true });
+  activateFlight(layer, 'polygon', { fit: true });
 }
+
+// --- circle radius editor (m / km / NM) ---
+function showRadiusInUnit() {
+  if (!state.circle) return;
+  const v = state.circle.radius_m / RADIUS_UNIT_M[els.circleRadiusUnit.value];
+  els.circleRadius.value = els.circleRadiusUnit.value === 'm' ? String(Math.round(v)) : String(Math.round(v * 1000) / 1000);
+}
+function applyRadiusInput() {
+  if (state.flightShape !== 'circle' || !state.circle || !state.flightLayer) return;
+  const meters = (parseFloat(els.circleRadius.value) || 0) * RADIUS_UNIT_M[els.circleRadiusUnit.value];
+  if (!(meters > 0)) return;
+  state.circle.radius_m = meters;
+  state.flightLayer.setRadius(meters);
+  analyzeFlight();
+}
+els.circleRadius.addEventListener('input', applyRadiusInput);
+els.circleRadiusUnit.addEventListener('change', showRadiusInUnit);
 
 els.editBtn.addEventListener('click', () => {
   if (!state.flightLayer) return;
@@ -310,14 +360,17 @@ function clearFlight() {
     map.removeLayer(state.flightLayer);
     state.flightLayer = null;
   }
+  state.flightShape = null;
+  state.circle = null;
   clearOverlaps();
   els.summary.classList.add('hidden');
+  els.circleRadiusRow.classList.add('hidden');
   els.saveBtn.classList.add('hidden');
   els.requestBtn.classList.add('hidden');
   els.editBtn.disabled = true;
   els.clearBtn.disabled = true;
   els.editBtn.textContent = 'Edit';
-  els.drawHint.textContent = 'Click Draw flying zone, then click on the map to place the corners of your planned flight area.';
+  els.drawHint.textContent = 'Draw a polygon (click corners, double-click to finish) or a circle (click a center, then set the radius).';
 }
 
 // =================================================================== //
@@ -333,9 +386,19 @@ function clearOverlaps() {
   prev.forEach(restyleZone);
 }
 
+// The flight geometry as a Feature<Polygon> — a circle becomes a 64-gon
+// approximation so all overlap/area/export logic works unchanged.
+function flightGeoJSON() {
+  if (state.flightShape === 'circle' && state.circle) {
+    return turf.circle(state.circle.center, state.circle.radius_m / 1000, { steps: 64, units: 'kilometers' });
+  }
+  return state.flightLayer && state.flightLayer.toGeoJSON ? state.flightLayer.toGeoJSON() : null;
+}
+
 function analyzeFlight() {
   if (!state.flightLayer) return;
-  const flight = state.flightLayer.toGeoJSON(); // Feature<Polygon>
+  const flight = flightGeoJSON();
+  if (!flight) return;
   const ring = flight.geometry.coordinates[0] || [];
   const flightBbox = turf.bbox(flight);
 
@@ -366,10 +429,14 @@ function analyzeFlight() {
   // Stats.
   const area = turf.area(flight);
   els.statArea.textContent = formatArea(area);
-  els.statVertices.textContent = Math.max(ring.length - 1, 0);
   els.statOverlaps.textContent = overlaps.length;
-
-  renderCoords(ring);
+  if (state.flightShape === 'circle') {
+    els.statVertices.textContent = '⭕ circle';
+    renderCircleCoords();
+  } else {
+    els.statVertices.textContent = Math.max(ring.length - 1, 0);
+    renderCoords(ring);
+  }
   renderOverlaps(overlaps);
 
   // Stash current analysis for export.
@@ -383,6 +450,18 @@ function renderCoords(ring) {
     .map(([lon, lat]) => `<li>${lat.toFixed(6)}, ${lon.toFixed(6)}</li>`)
     .join('');
   state.lastCoords = pts.map(([lon, lat]) => `${lat.toFixed(6)}, ${lon.toFixed(6)}`).join('\n');
+}
+
+// For a circle, show the center + radius instead of a vertex list.
+function renderCircleCoords() {
+  const [lng, lat] = state.circle.center;
+  const unit = els.circleRadiusUnit.value;
+  const r = state.circle.radius_m / RADIUS_UNIT_M[unit];
+  const rTxt = unit === 'm' ? Math.round(r) : Math.round(r * 1000) / 1000;
+  els.coordsList.innerHTML =
+    `<li>Center: ${lat.toFixed(6)}, ${lng.toFixed(6)}</li>` +
+    `<li>Radius: ${rTxt} ${unit} (${Math.round(state.circle.radius_m)} m)</li>`;
+  state.lastCoords = `Center: ${lat.toFixed(6)}, ${lng.toFixed(6)}\nRadius: ${rTxt} ${unit}`;
 }
 
 function renderOverlaps(overlaps) {
@@ -551,6 +630,7 @@ auth.init().then(() => {
     getFlight: () => state.lastFlight
       ? {
           geometry: state.lastFlight.geometry,
+          circle: state.flightShape === 'circle' && state.circle ? { ...state.circle } : null,
           overlaps: (state.lastOverlaps || []).map((o) => ({
             zone_id: o.feature.properties.zone_id,
             contact: o.feature.properties.contact,

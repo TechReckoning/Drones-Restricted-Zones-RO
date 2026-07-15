@@ -85,7 +85,7 @@ function renderWizard(flight) {
   const suggestedType = overlaps.length ? 'solicitare' : 'informare';
   const suggestedTwr = overlaps.length ? towerFromContact(overlaps[0].contact) : '';
   const op = libraryData.operator;
-  const radiusM = circleFromFlight(flight.geometry).radius_m;
+  const radiusM = circleFromFlight(flight.geometry, flight.circle).radius_m;
 
   const opts = (arr, sel) => arr.map((o) => `<option value="${escapeHtml(o[0])}"${o[0] === sel ? ' selected' : ''}>${escapeHtml(o[1])}</option>`).join('');
   const pilotOpts = libraryData.pilots.map((p) => `<option value="${p.id}">${escapeHtml(p.name || 'Unnamed')}</option>`).join('');
@@ -131,7 +131,12 @@ function renderWizard(flight) {
   el('rq_generate').addEventListener('click', () => generate(flight));
 }
 
-function circleFromFlight(geometry) {
+function circleFromFlight(geometry, circle) {
+  // If the zone was drawn as a circle, use its exact center + radius.
+  if (circle && Array.isArray(circle.center)) {
+    return { center: circle.center, radius_m: Math.max(1, Math.round(circle.radius_m)) };
+  }
+  // Otherwise derive an enclosing circle from the polygon.
   const center = turf.centroid(geometry).geometry.coordinates; // [lng,lat]
   const ring = geometry.coordinates[0] || [];
   let rkm = 0;
@@ -144,7 +149,7 @@ function buildFields(flight) {
   const op = libraryData.operator || {};
   const pilot = libraryData.pilots.find((p) => p.id === el('rq_pilot').value) || {};
   const drone = libraryData.drones.find((d) => d.id === el('rq_drone').value) || {};
-  const { center, radius_m } = circleFromFlight(flight.geometry);
+  const { center, radius_m } = circleFromFlight(flight.geometry, flight.circle);
   const clat = decimalToDMS(center[1]), clon = decimalToDMS(center[0]);
   const v = (id) => (el(id) ? el(id).value.trim() : '');
 

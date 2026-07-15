@@ -157,8 +157,25 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 /* ---------- Left panel: draw / flight summary ---------- */
 .draw-controls { display: flex; gap: 8px; flex-wrap: wrap; }
-.draw-controls .btn-primary { flex: 1 1 100%; }
-.draw-controls .btn-ghost { flex: 1 1 0; }
+.draw-controls .btn { flex: 1 1 45%; }
+
+.circle-radius-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.circle-radius-row label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.circle-radius-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  font-size: 13px;
+}
+.circle-radius-row select {
+  padding: 7px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  font-size: 13px;
+}
+.circle-radius-row input:focus, .circle-radius-row select:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
 .hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 12px 0 0; }
 
 .flight-summary { margin-top: 14px; }
