@@ -140,6 +140,18 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
 .btn-ghost { background: transparent; border-color: var(--panel-border); }
 .btn-ghost:hover:not(:disabled) { background: #f1f5f9; }
+/* Ghost buttons in the dark header need light text so their labels are always
+   readable (previously dark-on-dark → visible only on hover). */
+.app-header .btn-ghost {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  white-space: nowrap;
+}
+.app-header .btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
 .btn-block { width: 100%; margin: 12px 0 4px; }
 .btn-mini { padding: 2px 8px; font-size: 11px; font-weight: 600; }
 
