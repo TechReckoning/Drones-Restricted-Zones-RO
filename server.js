@@ -298,6 +298,53 @@ registerLibraryCrud('drones', 'drones', ['registration', 'serial', 'manufacturer
 registerLibraryCrud('requests', 'flight_requests', ['form_type', 'label', 'fields']);
 
 // ---------------------------------------------------------------------------
+// GDPR self-serve: data export (portability) + account deletion (erasure).
+//
+// Deliberately behind requireUser ONLY — never requireEntitlement: these rights
+// are unconditional and must keep working after a trial/subscription lapses.
+// ---------------------------------------------------------------------------
+
+const USER_TABLES = ['operator_profile', 'pilots', 'drones', 'flight_zones', 'flight_requests', 'subscriptions'];
+
+app.get('/api/account/export', requireUser, async (req, res) => {
+  const out = {
+    exported_at: new Date().toISOString(),
+    account: { id: req.user.id, email: req.user.email, created_at: req.user.created_at },
+  };
+  for (const t of USER_TABLES) {
+    const { data, error } = await req.db.from(t).select('*'); // RLS → only own rows
+    if (error) return res.status(500).json({ error: `Could not export ${t}: ${error.message}` });
+    out[t] = data;
+  }
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="drones-rz-romania-my-data.json"`);
+  res.send(JSON.stringify(out, null, 2));
+});
+
+app.post('/api/account/delete', requireUser, async (req, res) => {
+  const admin = supa.adminClient();
+  if (!admin) return res.status(503).json({ error: 'Account deletion is not available on this server.' });
+  // Require the caller to retype their email — guards against accidental deletion.
+  const confirm = String((req.body && req.body.confirm) || '').trim().toLowerCase();
+  if (!confirm || confirm !== String(req.user.email || '').toLowerCase()) {
+    return res.status(400).json({ error: 'The confirmation does not match your account email.' });
+  }
+  // Stop billing first, so a deleted account can never be charged again.
+  try {
+    const { data: sub } = await admin.from('subscriptions').select('stripe_subscription_id').eq('user_id', req.user.id).maybeSingle();
+    if (sub && sub.stripe_subscription_id && billing.configured()) {
+      try { await billing.stripe.subscriptions.cancel(sub.stripe_subscription_id); }
+      catch (e) { console.warn('[delete] could not cancel subscription:', e.message); }
+    }
+  } catch (e) { console.warn('[delete] subscription lookup failed:', e.message); }
+  // Delete the auth user; all app tables cascade via ON DELETE CASCADE.
+  // Invoices already issued stay with Stripe (Romanian fiscal retention).
+  const { error } = await admin.auth.admin.deleteUser(req.user.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ deleted: true });
+});
+
+// ---------------------------------------------------------------------------
 // Trial + billing entitlement (Phase 3)
 //
 // Access to pro features = an active 7-day trial OR an active subscription.

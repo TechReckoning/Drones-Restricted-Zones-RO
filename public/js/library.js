@@ -57,7 +57,70 @@ export const library = {
 
 function selectTab(name) {
   document.querySelectorAll('.lib-tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
-  ['operator', 'pilots', 'drones'].forEach((p) => el('lib-' + p).classList.toggle('hidden', p !== name));
+  ['operator', 'pilots', 'drones', 'privacy'].forEach((p) => el('lib-' + p).classList.toggle('hidden', p !== name));
+  if (name === 'privacy') renderPrivacy();
+}
+
+// ---------- Privacy: GDPR export + account deletion ----------
+function renderPrivacy() {
+  const email = (auth.user && auth.user.email) || '';
+  el('lib-privacy').innerHTML = `
+    <p class="hint">Your data, your control — these options always work, even without an active subscription.</p>
+
+    <h3 class="lib-formtitle">Export your data</h3>
+    <p class="hint">Download everything we hold about you — account, operator profile, pilots, drones,
+      saved flying zones, generated requests and subscription status — as a JSON file.</p>
+    <button id="gdpr-export" class="btn btn-primary btn-block">⬇ Download my data (JSON)</button>
+
+    <h3 class="lib-formtitle">Delete your account</h3>
+    <p class="hint">Permanently deletes your account and all of the data above. <strong>This cannot be undone.</strong>
+      Any active subscription is cancelled automatically. Invoices already issued are kept by our payment
+      processor for the period required by Romanian fiscal law.</p>
+    <button id="gdpr-del-start" class="btn btn-danger btn-block">Delete my account…</button>
+    <div id="gdpr-del-confirm" class="hidden">
+      <p class="hint" style="color:var(--danger)">Type your email (<strong>${escapeHtml(email)}</strong>) to confirm:</p>
+      <input id="del-confirm" class="search" type="email" placeholder="your@email" autocomplete="off" />
+      <button id="gdpr-del-go" class="btn btn-danger btn-block">Delete permanently</button>
+      <p id="del-status" class="hint"></p>
+    </div>`;
+
+  el('gdpr-export').addEventListener('click', exportData);
+  el('gdpr-del-start').addEventListener('click', () => {
+    el('gdpr-del-confirm').classList.remove('hidden');
+    el('del-confirm').focus();
+  });
+  el('gdpr-del-go').addEventListener('click', deleteAccount);
+}
+
+async function exportData() {
+  const btn = el('gdpr-export');
+  btn.disabled = true;
+  const res = await api('/api/account/export');
+  btn.disabled = false;
+  if (!res.ok) return toast('Export failed.');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'drones-rz-romania-my-data.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast('Your data has been downloaded.');
+}
+
+async function deleteAccount() {
+  const status = el('del-status');
+  status.textContent = 'Deleting…';
+  const res = await api('/api/account/delete', { method: 'POST', body: JSON.stringify({ confirm: el('del-confirm').value }) });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    status.textContent = e.error || 'Deletion failed.';
+    return;
+  }
+  await auth.signOut();
+  window.location.href = '/';
 }
 
 // ---------- Operator ----------
