@@ -438,6 +438,17 @@ app.post('/api/billing/checkout', requireUser, async (req, res) => {
       client_reference_id: req.user.id,
       subscription_data: { metadata: { user_id: req.user.id } },
       allow_promotion_codes: true,
+      // Collect the details needed to issue legally-required Romanian invoices.
+      billing_address_collection: 'required', // full name + billing address
+      custom_fields: [
+        {
+          key: 'cnp',
+          label: { type: 'custom', custom: 'CNP (Cod Numeric Personal)' },
+          type: 'numeric',
+          numeric: { minimum_length: 13, maximum_length: 13 },
+          optional: false,
+        },
+      ],
       success_url: `${base}/?checkout=success`,
       cancel_url: `${base}/?checkout=cancel`,
     });
@@ -478,6 +489,9 @@ async function billingWebhookHandler(req, res) {
   try {
     switch (event.type) {
       case 'checkout.session.completed':
+        await captureBillingDetails(event.data.object);
+        await syncSubscription(event);
+        break;
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
@@ -490,6 +504,26 @@ async function billingWebhookHandler(req, res) {
   } catch (err) {
     console.error('[webhook] handler error:', err.message);
     res.status(500).end();
+  }
+}
+
+// On checkout completion, persist the invoicing identity (name, address, CNP) onto
+// the Stripe customer so it's available for every invoice, including renewals.
+// CNP is kept in Stripe customer metadata (not duplicated into our own database).
+async function captureBillingDetails(session) {
+  try {
+    if (!session || !session.customer) return;
+    const details = session.customer_details || {};
+    const cnpField = (session.custom_fields || []).find((f) => f.key === 'cnp');
+    const cnp = cnpField && cnpField.numeric ? cnpField.numeric.value : null;
+    const update = {};
+    if (details.name) update.name = details.name;
+    if (details.address) update.address = details.address;
+    if (details.phone) update.phone = details.phone;
+    if (cnp) update.metadata = { cnp };
+    if (Object.keys(update).length) await billing.stripe.customers.update(session.customer, update);
+  } catch (err) {
+    console.warn('[billing] could not capture billing details:', err.message);
   }
 }
 
