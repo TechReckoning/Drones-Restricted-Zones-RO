@@ -24,7 +24,7 @@ const STYLE = {
   flight:   { color: '#16a34a', weight: 2, opacity: 1,   fillColor: '#16a34a', fillOpacity: 0.20, dashArray: null },
   isNew:    { color: '#0891b2', weight: 3, opacity: 1,   fillColor: '#06b6d4', fillOpacity: 0.25, dashArray: '5,4' },
   ctr:      { color: '#7c3aed', weight: 2, opacity: 1,   fillColor: '#8b5cf6', fillOpacity: 0.28, dashArray: null },
-  permanent:{ color: '#ea580c', weight: 2, opacity: 1,   fillColor: '#f97316', fillOpacity: 0.30, dashArray: null },
+  permanent:{ color: '#db2777', weight: 2, opacity: 1,   fillColor: '#ec4899', fillOpacity: 0.30, dashArray: null },
 };
 
 // zone key -> { feature, layer, item, bbox, searchText }

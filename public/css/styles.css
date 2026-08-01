@@ -99,10 +99,10 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 }
 .new-pill { background: #0891b2; }
 .ctr-pill { background: #7c3aed; }
-.perm-pill { background: #ea580c; }
+.perm-pill { background: #db2777; }
 /* Category left-accents in the list (selection/overlap still take precedence). */
 .zone-item.is-ctr { border-left-color: #7c3aed; }
-.zone-item.is-permanent { border-left-color: #ea580c; }
+.zone-item.is-permanent { border-left-color: #db2777; }
 
 /* ---------- Layout ---------- */
 .layout { flex: 1 1 auto; display: flex; min-height: 0; }
