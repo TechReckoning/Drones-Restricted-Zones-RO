@@ -85,8 +85,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .chip:hover { background: rgba(8, 145, 178, 0.32); }
 .chip.active { background: #06b6d4; color: #06232b; border-color: #06b6d4; }
 
-/* "NEW" / "CTR" pills on zones in the list */
-.new-pill, .ctr-pill {
+/* "NEW" / "CTR" / permanent pills on zones in the list */
+.new-pill, .ctr-pill, .perm-pill {
   display: inline-block;
   font-size: 9px;
   font-weight: 800;
@@ -99,8 +99,10 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 }
 .new-pill { background: #0891b2; }
 .ctr-pill { background: #7c3aed; }
-/* CTR zones: a subtle violet left-accent in the list (selection/overlap still win). */
+.perm-pill { background: #ea580c; }
+/* Category left-accents in the list (selection/overlap still take precedence). */
 .zone-item.is-ctr { border-left-color: #7c3aed; }
+.zone-item.is-permanent { border-left-color: #ea580c; }
 
 /* ---------- Layout ---------- */
 .layout { flex: 1 1 auto; display: flex; min-height: 0; }

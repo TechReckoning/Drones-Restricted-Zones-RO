@@ -24,6 +24,7 @@ const STYLE = {
   flight:   { color: '#16a34a', weight: 2, opacity: 1,   fillColor: '#16a34a', fillOpacity: 0.20, dashArray: null },
   isNew:    { color: '#0891b2', weight: 3, opacity: 1,   fillColor: '#06b6d4', fillOpacity: 0.25, dashArray: '5,4' },
   ctr:      { color: '#7c3aed', weight: 2, opacity: 1,   fillColor: '#8b5cf6', fillOpacity: 0.28, dashArray: null },
+  permanent:{ color: '#ea580c', weight: 2, opacity: 1,   fillColor: '#f97316', fillOpacity: 0.30, dashArray: null },
 };
 
 // zone key -> { feature, layer, item, bbox, searchText }
@@ -104,6 +105,15 @@ async function loadZones({ refresh = false } = {}) {
     state.datasetValidFrom = (meta && meta.dataset && meta.dataset.validFrom) || null;
     zonesGroup.addData(geojson);
 
+    // Merge the bundled permanent prohibited/restricted zones (LRP/LRR) — these
+    // are national permanent zones, not part of the ROMATSA UAV feed.
+    try {
+      const perm = await (await fetch('/data/permanent_zones.json')).json();
+      if (perm && Array.isArray(perm.features)) zonesGroup.addData(perm);
+    } catch (e) {
+      console.warn('permanent zones failed to load:', e.message);
+    }
+
     renderZoneList();
     els.zoneCount.textContent = zones.size;
     applyStatusMeta(meta);
@@ -124,6 +134,7 @@ function registerZone(feature, layer) {
     item: null,
     isNew: state.newZones.has(p.zone_id),
     isCtr: state.ctrZones.has(p.zone_id),
+    isPermanent: p.category === 'permanent',
     bbox: turf.bbox(feature), // [minX, minY, maxX, maxY]
     searchText: `${p.zone_id || ''} ${p.contact || ''} ${p.lower_lim || ''} ${p.upper_lim || ''}`.toLowerCase(),
   };
@@ -155,8 +166,11 @@ function renderZoneList() {
       const ctrPill = r.isCtr
         ? ` <span class="ctr-pill" title="Control zone (CTR)">CTR</span>`
         : '';
-      return `<div class="zone-item${r.isNew ? ' is-new' : ''}${r.isCtr ? ' is-ctr' : ''}" data-id="${escapeHtml(key)}" role="option">
-        <div class="zi-title"><span>${escapeHtml(p.zone_id || '—')}${ctrPill}${newPill}</span>
+      const permPill = r.isPermanent
+        ? ` <span class="perm-pill" title="Permanent ${escapeHtml(p.kind || 'restricted')} zone">${p.kind === 'prohibited' ? 'PROHIBITED' : 'RESTRICTED'}</span>`
+        : '';
+      return `<div class="zone-item${r.isNew ? ' is-new' : ''}${r.isCtr ? ' is-ctr' : ''}${r.isPermanent ? ' is-permanent' : ''}" data-id="${escapeHtml(key)}" role="option">
+        <div class="zi-title"><span>${escapeHtml(p.zone_id || '—')}${permPill}${ctrPill}${newPill}</span>
           <span class="zi-alt">${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}</span></div>
         <div class="zi-contact">${escapeHtml(p.contact || '')}</div>
       </div>`;
@@ -223,6 +237,7 @@ function styleFor(id) {
   if (id === state.selectedId) return STYLE.selected;
   if (state.overlapIds.has(id)) return STYLE.overlap;
   const r = zones.get(id);
+  if (r && r.isPermanent) return STYLE.permanent;
   if (r && r.isNew) return STYLE.isNew;
   if (r && r.isCtr) return STYLE.ctr;
   return STYLE.base;

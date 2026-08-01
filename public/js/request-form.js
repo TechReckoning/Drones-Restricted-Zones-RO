@@ -81,7 +81,9 @@ export const request = {
 
 // ---------- wizard ----------
 function renderWizard(flight) {
-  const overlaps = flight.overlaps || [];
+  // Only ROMATSA "RZ" zones feed the Anexa RZ field/tower; permanent LRP/LRR
+  // zones have a separate authorization process, so they're excluded here.
+  const overlaps = (flight.overlaps || []).filter((o) => /^RZ\s/i.test(o.zone_id || ''));
   const suggestedTwr = overlaps.length ? towerFromContact(overlaps[0].contact) : '';
   const op = libraryData.operator;
 
