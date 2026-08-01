@@ -85,19 +85,22 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .chip:hover { background: rgba(8, 145, 178, 0.32); }
 .chip.active { background: #06b6d4; color: #06232b; border-color: #06b6d4; }
 
-/* "NEW" pill on newly-added zones in the list */
-.new-pill {
+/* "NEW" / "CTR" pills on zones in the list */
+.new-pill, .ctr-pill {
   display: inline-block;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.5px;
   color: #fff;
-  background: #0891b2;
   padding: 1px 5px;
   border-radius: 4px;
   vertical-align: middle;
   margin-left: 6px;
 }
+.new-pill { background: #0891b2; }
+.ctr-pill { background: #7c3aed; }
+/* CTR zones: a subtle violet left-accent in the list (selection/overlap still win). */
+.zone-item.is-ctr { border-left-color: #7c3aed; }
 
 /* ---------- Layout ---------- */
 .layout { flex: 1 1 auto; display: flex; min-height: 0; }

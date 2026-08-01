@@ -59,10 +59,11 @@ function loadDatasetInfo() {
     return {
       validFrom: meta.currentValidFrom || (current && current.validFrom) || null,
       newZones: (current && Array.isArray(current.newZones) && current.newZones) || [],
+      ctrZones: Array.isArray(meta.ctrZones) ? meta.ctrZones : [],
     };
   } catch (err) {
     console.warn('[dataset-meta] could not read metadata:', err.message);
-    return { validFrom: null, newZones: [] };
+    return { validFrom: null, newZones: [], ctrZones: [] };
   }
 }
 const datasetInfo = loadDatasetInfo();

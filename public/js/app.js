@@ -23,6 +23,7 @@ const STYLE = {
   overlap:  { color: '#dc2626', weight: 2, opacity: 1,   fillColor: '#dc2626', fillOpacity: 0.30, dashArray: null },
   flight:   { color: '#16a34a', weight: 2, opacity: 1,   fillColor: '#16a34a', fillOpacity: 0.20, dashArray: null },
   isNew:    { color: '#0891b2', weight: 3, opacity: 1,   fillColor: '#06b6d4', fillOpacity: 0.25, dashArray: '5,4' },
+  ctr:      { color: '#7c3aed', weight: 2, opacity: 1,   fillColor: '#8b5cf6', fillOpacity: 0.28, dashArray: null },
 };
 
 // zone key -> { feature, layer, item, bbox, searchText }
@@ -34,6 +35,7 @@ const state = {
   flightShape: null,   // 'polygon' | 'circle'
   circle: null,        // { center: [lng, lat], radius_m } when flightShape === 'circle'
   newZones: new Set(), // zone_ids added in the current dataset version
+  ctrZones: new Set(), // zone_ids classified as CTR (control zone)
   newOnly: false,      // "New (N)" chip filter active
 };
 
@@ -96,8 +98,9 @@ async function loadZones({ refresh = false } = {}) {
     zonesGroup.clearLayers();
     state.selectedId = null;
     state.overlapIds.clear();
-    // Must be set BEFORE addData so registerZone/styleFor can flag new zones.
+    // Must be set BEFORE addData so registerZone/styleFor can flag new/CTR zones.
     state.newZones = new Set((meta && meta.dataset && meta.dataset.newZones) || []);
+    state.ctrZones = new Set((meta && meta.dataset && meta.dataset.ctrZones) || []);
     state.datasetValidFrom = (meta && meta.dataset && meta.dataset.validFrom) || null;
     zonesGroup.addData(geojson);
 
@@ -120,6 +123,7 @@ function registerZone(feature, layer) {
     layer,
     item: null,
     isNew: state.newZones.has(p.zone_id),
+    isCtr: state.ctrZones.has(p.zone_id),
     bbox: turf.bbox(feature), // [minX, minY, maxX, maxY]
     searchText: `${p.zone_id || ''} ${p.contact || ''} ${p.lower_lim || ''} ${p.upper_lim || ''}`.toLowerCase(),
   };
@@ -148,8 +152,11 @@ function renderZoneList() {
       const newPill = r.isNew
         ? ` <span class="new-pill" title="Added ${escapeHtml(state.datasetValidFrom || '')}">NEW</span>`
         : '';
-      return `<div class="zone-item${r.isNew ? ' is-new' : ''}" data-id="${escapeHtml(key)}" role="option">
-        <div class="zi-title"><span>${escapeHtml(p.zone_id || '—')}${newPill}</span>
+      const ctrPill = r.isCtr
+        ? ` <span class="ctr-pill" title="Control zone (CTR)">CTR</span>`
+        : '';
+      return `<div class="zone-item${r.isNew ? ' is-new' : ''}${r.isCtr ? ' is-ctr' : ''}" data-id="${escapeHtml(key)}" role="option">
+        <div class="zi-title"><span>${escapeHtml(p.zone_id || '—')}${ctrPill}${newPill}</span>
           <span class="zi-alt">${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}</span></div>
         <div class="zi-contact">${escapeHtml(p.contact || '')}</div>
       </div>`;
@@ -217,6 +224,7 @@ function styleFor(id) {
   if (state.overlapIds.has(id)) return STYLE.overlap;
   const r = zones.get(id);
   if (r && r.isNew) return STYLE.isNew;
+  if (r && r.isCtr) return STYLE.ctr;
   return STYLE.base;
 }
 
