@@ -135,8 +135,9 @@ async function loadZones({ refresh = false } = {}) {
       console.warn('permanent zones failed to load:', e.message);
     }
 
-    // Merge active + upcoming NOTAMs (time-limited restrictions).
-    await loadNotams();
+    // Merge active + upcoming NOTAMs (time-limited restrictions). A manual refresh
+    // forces a live re-pull of the NOTAMs too, not just the zones.
+    await loadNotams({ refresh });
 
     renderZoneList();
     els.zoneCount.textContent = zones.size;
@@ -151,9 +152,9 @@ async function loadZones({ refresh = false } = {}) {
 
 // Fetch NOTAMs, keep active + upcoming (drop expired), normalise each into the
 // common zone property shape, and add them to the map/list.
-async function loadNotams() {
+async function loadNotams({ refresh = false } = {}) {
   try {
-    const { geojson } = await (await fetch('/api/notams')).json();
+    const { geojson } = await (await fetch('/api/notams' + (refresh ? '?refresh=1' : ''))).json();
     if (!geojson || !Array.isArray(geojson.features)) return;
     const now = Date.now();
     const features = geojson.features
@@ -200,6 +201,7 @@ function normalizeNotam(f, now) {
       notam_from: p.dfrom || null,
       notam_to: p.dto || null,
       notam_state: stateName,
+      notam_raw: msg.replace(/\s+/g, ' ').trim(), // full decoded message for the expanded view
     },
   };
 }
@@ -240,47 +242,35 @@ function registerZone(feature, layer) {
 }
 
 // =================================================================== //
-//  Restricted-zone list (right panel)
+//  Restricted-zone list (right panel) — grouped, collapsible, expandable
 // =================================================================== //
 function renderZoneList() {
-  const sorted = [...zones.entries()].sort((a, b) =>
+  // Partition into branches: RZ (with a CTR subgroup), NOTAMs, Permanent.
+  const g = { ctr: [], rz: [], notam: [], permanent: [] };
+  zones.forEach((r, key) => {
+    if (r.isNotam) g.notam.push([key, r]);
+    else if (r.isPermanent) g.permanent.push([key, r]);
+    else if (r.isCtr) g.ctr.push([key, r]);
+    else g.rz.push([key, r]);
+  });
+  const byId = (a, b) =>
     (a[1].feature.properties.zone_id || '').localeCompare(
-      b[1].feature.properties.zone_id || '',
-      undefined,
-      { numeric: true }
-    )
-  );
+      b[1].feature.properties.zone_id || '', undefined, { numeric: true }
+    );
+  Object.values(g).forEach((list) => list.sort(byId));
 
-  const html = sorted
-    .map(([key, r]) => {
-      const p = r.feature.properties || {};
-      if (r.isNotam) {
-        const active = p.notam_state === 'active';
-        const type = NOTAM_TIP[p.notam_tip] || p.notam_tip || '';
-        const validity = formatNotamValidity(p.notam_from, p.notam_to);
-        return `<div class="zone-item is-notam" data-id="${escapeHtml(key)}" role="option">
-          <div class="zi-title"><span>${escapeHtml(p.zone_id || 'NOTAM')} <span class="notam-pill">NOTAM${type ? ' · ' + escapeHtml(type) : ''}</span>${active ? ' <span class="notam-active">ACTIVE</span>' : ''}</span>
-            <span class="zi-alt">${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}</span></div>
-          <div class="zi-contact">🕑 ${escapeHtml(validity)}${p.contact ? ' · ' + escapeHtml(p.contact) : ''}</div>
-        </div>`;
-      }
-      const newPill = r.isNew
-        ? ` <span class="new-pill" title="Added ${escapeHtml(state.datasetValidFrom || '')}">NEW</span>`
-        : '';
-      const ctrPill = r.isCtr
-        ? ` <span class="ctr-pill" title="Control zone (CTR)">CTR</span>`
-        : '';
-      const permPill = r.isPermanent
-        ? ` <span class="perm-pill" title="Permanent ${escapeHtml(p.kind || 'restricted')} zone">${p.kind === 'prohibited' ? 'PROHIBITED' : 'RESTRICTED'}</span>`
-        : '';
-      return `<div class="zone-item${r.isNew ? ' is-new' : ''}${r.isCtr ? ' is-ctr' : ''}${r.isPermanent ? ' is-permanent' : ''}" data-id="${escapeHtml(key)}" role="option">
-        <div class="zi-title"><span>${escapeHtml(p.zone_id || '—')}${permPill}${ctrPill}${newPill}</span>
-          <span class="zi-alt">${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}</span></div>
-        <div class="zi-contact">${escapeHtml(p.contact || '')}</div>
-      </div>`;
-    })
-    .join('');
-  els.zoneList.innerHTML = html || '<div class="zone-list-empty">No zones.</div>';
+  const sections = [];
+  const rzTotal = g.ctr.length + g.rz.length;
+  if (rzTotal) {
+    let body = '';
+    if (g.ctr.length) body += subHtml('Control zones (CTR)', g.ctr);
+    if (g.rz.length) body += subHtml(g.ctr.length ? 'Other restricted zones' : 'Restricted zones', g.rz);
+    sections.push(sectionHtml('rz', 'Restricted zones (RZ)', rzTotal, body));
+  }
+  if (g.notam.length) sections.push(sectionHtml('notam', 'NOTAMs', g.notam.length, itemsHtml(g.notam)));
+  if (g.permanent.length) sections.push(sectionHtml('permanent', 'Permanent restrictions', g.permanent.length, itemsHtml(g.permanent)));
+
+  els.zoneList.innerHTML = sections.join('') || '<div class="zone-list-empty">No zones.</div>';
 
   // Cache element refs back onto the records.
   els.zoneList.querySelectorAll('.zone-item').forEach((el) => {
@@ -289,24 +279,124 @@ function renderZoneList() {
   });
 }
 
-// Event delegation for list clicks.
+function sectionHtml(cat, name, count, body) {
+  return `<section class="zgroup" data-cat="${cat}">
+    <button type="button" class="zgroup-head" aria-expanded="true">
+      <span class="zg-caret" aria-hidden="true">▾</span>
+      <span class="zg-name">${escapeHtml(name)}</span>
+      <span class="zg-count" data-total="${count}">${count}</span>
+    </button>
+    <div class="zgroup-body">${body}</div>
+  </section>`;
+}
+
+function subHtml(name, list) {
+  return `<div class="zsub">
+    <div class="zsub-head">${escapeHtml(name)} <span class="zsub-count" data-total="${list.length}">${list.length}</span></div>
+    ${itemsHtml(list)}
+  </div>`;
+}
+
+function itemsHtml(list) {
+  return list.map(([key, r]) => zoneItemHtml(key, r)).join('');
+}
+
+// One collapsed-by-default row: a summary line + a hidden detail panel.
+function zoneItemHtml(key, r) {
+  const p = r.feature.properties || {};
+  const accent = r.isNotam ? 'is-notam'
+    : r.isPermanent ? 'is-permanent'
+    : r.isNew ? 'is-new'
+    : r.isCtr ? 'is-ctr'
+    : 'is-rz';
+  const alt = `${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}`;
+  return `<div class="zone-item ${accent}" data-id="${escapeHtml(key)}" role="option">
+    <div class="zi-title"><span>${escapeHtml(p.zone_id || '—')}${zonePills(r, p)}</span>
+      <span class="zi-alt">${alt}</span></div>
+    <div class="zi-detail">${zoneDetailHtml(r, p, key)}</div>
+  </div>`;
+}
+
+function zonePills(r, p) {
+  if (r.isNotam) {
+    const t = NOTAM_TIP[p.notam_tip] || p.notam_tip || '';
+    return ` <span class="notam-pill">NOTAM${t ? ' · ' + escapeHtml(t) : ''}</span>` +
+      (p.notam_state === 'active' ? ' <span class="notam-active">ACTIVE</span>' : '');
+  }
+  let s = '';
+  if (r.isPermanent) s += ` <span class="perm-pill">${p.kind === 'prohibited' ? 'PROHIBITED' : 'RESTRICTED'}</span>`;
+  if (r.isCtr) s += ' <span class="ctr-pill" title="Control zone (CTR)">CTR</span>';
+  if (r.isNew) s += ` <span class="new-pill" title="Added ${escapeHtml(state.datasetValidFrom || '')}">NEW</span>`;
+  return s;
+}
+
+function zoneDetailHtml(r, p, key) {
+  const rows = [detRow('Altitude', `${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}`)];
+  if (r.isNotam) {
+    const t = NOTAM_TIP[p.notam_tip] || p.notam_tip || '';
+    rows.push(detRow('Type', `NOTAM${t ? ' · ' + escapeHtml(t) : ''} (${p.notam_state === 'active' ? 'active now' : 'upcoming'})`));
+    rows.push(detRow('Valid', escapeHtml(formatNotamValidity(p.notam_from, p.notam_to))));
+    if (p.notam_raw) rows.push(`<div class="zd-raw">${escapeHtml(p.notam_raw)}</div>`);
+  } else {
+    rows.push(detRow('Status', escapeHtml(p.status || '?')));
+    if (r.isCtr) rows.push(detRow('Class', 'Control zone (CTR)'));
+    if (r.isPermanent) rows.push(detRow('Type', `Permanent ${p.kind === 'prohibited' ? 'prohibited' : 'restricted'} zone`));
+    if (p.contact) rows.push(detRow(r.isPermanent ? 'Notes' : 'Contact', escapeHtml(p.contact)));
+  }
+  rows.push(`<button type="button" class="zi-zoom" data-zoom="${escapeHtml(key)}">⤢ Zoom to on map</button>`);
+  return rows.join('');
+}
+
+function detRow(label, val) {
+  return `<div class="zd-row"><span class="zd-label">${escapeHtml(label)}</span><span class="zd-val">${val}</span></div>`;
+}
+
+// Event delegation for list clicks: collapse a section, zoom a row, or expand a row.
 els.zoneList.addEventListener('click', (e) => {
+  const head = e.target.closest('.zgroup-head');
+  if (head) {
+    const sec = head.closest('.zgroup');
+    const collapsed = sec.classList.toggle('collapsed');
+    head.setAttribute('aria-expanded', String(!collapsed));
+    return;
+  }
+  const zoom = e.target.closest('.zi-zoom');
+  if (zoom) { selectZone(zoom.dataset.zoom, { pan: true }); return; }
   const item = e.target.closest('.zone-item');
-  if (item) selectZone(item.dataset.id, { pan: true });
+  if (item) {
+    const id = item.dataset.id;
+    item.classList.toggle('expanded');
+    // Highlight on the map without moving it (per design: expand-in-place).
+    applySelection(new Set([id]));
+    const r = zones.get(id);
+    if (r) r.layer.bringToFront();
+  }
 });
 
-// Search / filter (text search + "New only" chip combine).
+// Search / filter (text search + "New only" chip combine). Hides empty
+// sub-groups/sections and reflects the visible counts while filtering.
 function applyZoneFilter() {
   const q = els.search.value.trim().toLowerCase();
-  let visible = 0;
+  const filtered = Boolean(q || state.newOnly);
   zones.forEach((r) => {
     if (!r.item) return;
     const show = (!q || r.searchText.includes(q)) && (!state.newOnly || r.isNew);
     r.item.classList.toggle('hidden', !show);
-    if (show) visible++;
   });
-  const filtered = q || state.newOnly;
-  els.zoneCount.textContent = filtered ? `${visible}/${zones.size}` : String(zones.size);
+  els.zoneList.querySelectorAll('.zsub').forEach((sub) => {
+    const vis = sub.querySelectorAll('.zone-item:not(.hidden)').length;
+    sub.classList.toggle('hidden', vis === 0);
+    const c = sub.querySelector('.zsub-count');
+    if (c) c.textContent = filtered ? vis : c.dataset.total;
+  });
+  els.zoneList.querySelectorAll('.zgroup').forEach((sec) => {
+    const vis = sec.querySelectorAll('.zone-item:not(.hidden)').length;
+    sec.classList.toggle('hidden', vis === 0);
+    const gc = sec.querySelector('.zg-count');
+    if (gc) gc.textContent = filtered ? vis : gc.dataset.total;
+  });
+  const total = els.zoneList.querySelectorAll('.zone-item:not(.hidden)').length;
+  els.zoneCount.textContent = filtered ? `${total}/${zones.size}` : String(zones.size);
 }
 
 els.search.addEventListener('input', () => {
@@ -781,20 +871,34 @@ function setStatus(kind, text) {
   els.status.textContent = text;
 }
 
+// The pill reports data freshness/source, NOT a count (the list carries counts).
 function applyStatusMeta(meta) {
-  if (!meta) return setStatus('live', 'Zones loaded');
-  const when = meta.fetchedAt ? new Date(meta.fetchedAt).toLocaleString() : 'bundled snapshot';
+  if (!meta) return setStatus('live', '● Live');
+  const rel = meta.fetchedAt ? relTime(meta.fetchedAt) : null;
+  const title = meta.fetchedAt ? `Fetched from ROMATSA ${new Date(meta.fetchedAt).toLocaleString()}` : '';
+  els.status.title = title;
   switch (meta.source) {
     case 'live':
-      return setStatus('live', `● Live · ${meta.count} zones`);
     case 'live-cache':
-      return setStatus('cache', `● Cached · ${meta.count} zones`);
+      return setStatus('live', `● Live${rel ? ' · updated ' + rel : ''}`);
     case 'stale-cache':
+      return setStatus('cache', `● Cached${rel ? ' · ' + rel : ''}`);
     case 'snapshot':
-      return setStatus('snapshot', `⚠ Offline snapshot · ${meta.count} zones`);
+      return setStatus('snapshot', '⚠ Offline snapshot');
     default:
-      return setStatus('live', `${meta.count} zones · ${when}`);
+      return setStatus('live', '● Live');
   }
+}
+
+// Compact relative time: "just now", "3 min ago", "2 h ago", "1 d ago".
+function relTime(iso) {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 45) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return `${Math.round(h / 24)} d ago`;
 }
 
 // Header dataset provenance: "Valid from <date>" + the "New (N)" filter chip.

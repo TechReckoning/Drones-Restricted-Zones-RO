@@ -259,18 +259,64 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .search:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
 
 .zone-list { overflow-y: auto; flex: 1 1 auto; }
+
+/* Collapsible branch (RZ / NOTAMs / Permanent) */
+.zgroup.hidden { display: none; }
+.zgroup-head {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border: none; border-bottom: 1px solid var(--panel-border);
+  background: #f8fafc; cursor: pointer; text-align: left;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.02em; color: #334155;
+  position: sticky; top: 0; z-index: 1;
+}
+.zgroup-head:hover { background: #f1f5f9; }
+.zg-caret { font-size: 10px; color: var(--muted); transition: transform 0.15s; }
+.zgroup.collapsed .zg-caret { transform: rotate(-90deg); }
+.zg-name { flex: 1 1 auto; }
+.zg-count { background: #e2e8f0; color: #475569; border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 700; }
+.zgroup.collapsed .zgroup-body { display: none; }
+.zsub.hidden { display: none; }
+.zsub-head {
+  padding: 5px 14px 5px 26px; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted); background: #fcfdff; border-bottom: 1px solid #f1f5f9;
+}
+.zsub-count { color: #94a3b8; }
+
 .zone-item {
   padding: 10px 14px;
   border-bottom: 1px solid #f1f5f9;
   cursor: pointer;
   border-left: 4px solid transparent;
 }
+.zone-item.hidden { display: none; }
 .zone-item:hover { background: #f8fafc; }
+/* Branch accents in the list (mirror the map colours). Declared BEFORE
+   .selected/.overlap so an active selection/overlap colour always wins. */
+.zone-item.is-rz { border-left-color: var(--zone); }
+.zone-item.is-new { border-left-color: #0891b2; }
 .zone-item.selected { background: #fff7ed; border-left-color: var(--zone-selected); }
 .zone-item.overlap { background: #fef2f2; border-left-color: var(--zone-overlap); }
 .zi-title { font-weight: 700; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .zi-alt { font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap; }
 .zi-contact { font-size: 11px; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Expandable detail (revealed on click) */
+.zi-detail { display: none; margin-top: 8px; }
+.zone-item.expanded .zi-detail { display: block; }
+.zd-row { display: flex; gap: 8px; font-size: 12px; margin-top: 3px; }
+.zd-label { flex: 0 0 74px; color: var(--muted); font-weight: 700; }
+.zd-val { flex: 1 1 auto; color: #334155; word-break: break-word; }
+.zd-raw {
+  margin-top: 6px; padding: 7px 9px; background: #f8fafc; border: 1px solid var(--panel-border);
+  border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; line-height: 1.5; color: #475569; white-space: pre-wrap; word-break: break-word;
+}
+.zi-zoom {
+  margin-top: 8px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+  background: #eff6ff; color: var(--primary-dark); border: 1px solid #bfdbfe; border-radius: 6px;
+}
+.zi-zoom:hover { background: #dbeafe; }
+
 .zone-list-empty { padding: 20px 14px; color: var(--muted); font-size: 13px; text-align: center; }
 
 /* ---------- Auth + history (Phase 2) ---------- */

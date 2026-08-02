@@ -39,7 +39,7 @@ const SOURCE_URL =
   'https://flightplan.romatsa.ro/init/static/zone_restrictionate_uav.json';
 const SNAPSHOT_PATH = path.join(__dirname, 'data', 'zones.snapshot.json');
 const DATASET_META_PATH = path.join(__dirname, 'data', 'dataset-meta.json');
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes (matches the background refresh)
 const FETCH_TIMEOUT_MS = 20 * 1000;
 
 // NOTAMs (time-limited restrictions). Live source is a ROMATSA GeoServer WFS
@@ -47,7 +47,7 @@ const FETCH_TIMEOUT_MS = 20 * 1000;
 // snapshot is served. Cached briefly because NOTAMs change often.
 const NOTAM_SOURCE_URL = process.env.NOTAM_SOURCE_URL || '';
 const NOTAM_SNAPSHOT_PATH = path.join(__dirname, 'data', 'notams.snapshot.json');
-const NOTAM_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const NOTAM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes (matches the background refresh)
 
 /** @type {{ data: any, ts: number }} */
 let cache = { data: null, ts: 0 };
@@ -140,6 +140,35 @@ async function writeSnapshot(json) {
     await fs.promises.writeFile(SNAPSHOT_PATH, JSON.stringify(json));
   } catch (err) {
     console.warn('[zones] could not persist snapshot:', err.message);
+  }
+}
+
+// Pull the zones feed and update the in-memory cache + on-disk snapshot. Used by
+// the background refresher so the cache stays warm even with zero traffic.
+async function refreshZonesCache(reason) {
+  try {
+    const json = await fetchZonesFromSource();
+    cache = { data: json, ts: Date.now() };
+    writeSnapshot(json);
+    return true;
+  } catch (err) {
+    console.warn(`[zones] background refresh failed (${reason}):`, describeFetchError(err));
+    return false;
+  }
+}
+
+// Same for the NOTAM feed (no-op when no source is configured).
+async function refreshNotamCache(reason) {
+  if (!NOTAM_SOURCE_URL) return false;
+  try {
+    const json = await fetchRomatsaJson(NOTAM_SOURCE_URL);
+    if (!isFeatureCollection(json)) throw new Error('NOTAM source payload is not a non-empty FeatureCollection');
+    notamCache = { data: json, ts: Date.now() };
+    fs.promises.writeFile(NOTAM_SNAPSHOT_PATH, JSON.stringify(json)).catch(() => {});
+    return true;
+  } catch (err) {
+    console.warn(`[notams] background refresh failed (${reason}):`, describeFetchError(err));
+    return false;
   }
 }
 
@@ -681,9 +710,22 @@ app.post('/api/billing/sync', requireUser, async (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
+// Background refresh: keep both caches warm from ROMATSA even with no visitors, so
+// the first request is always live and the data never silently goes stale.
+const ZONES_REFRESH_MS = 30 * 60 * 1000; // 30 minutes
+const NOTAM_REFRESH_MS = 5 * 60 * 1000;  // 5 minutes
+function startBackgroundRefresh() {
+  refreshZonesCache('startup');
+  refreshNotamCache('startup');
+  setInterval(() => refreshZonesCache('interval'), ZONES_REFRESH_MS).unref();
+  if (NOTAM_SOURCE_URL) setInterval(() => refreshNotamCache('interval'), NOTAM_REFRESH_MS).unref();
+}
+
 app.listen(PORT, () => {
   console.log(`Drones Restricted Zones RO running at http://localhost:${PORT}`);
   console.log(`Zones source: ${SOURCE_URL}`);
+  console.log(`NOTAM source: ${NOTAM_SOURCE_URL ? NOTAM_SOURCE_URL : 'NOT configured (snapshot only)'}`);
   console.log(`Accounts (Supabase): ${supa.isConfigured() ? 'configured' : 'NOT configured (account features disabled)'}`);
   console.log(`Billing (Stripe): ${billing.configured() ? 'configured' : 'NOT configured (trial-only / no paywall)'}`);
+  startBackgroundRefresh();
 });
