@@ -31,7 +31,7 @@ const STYLE = {
 // zone key -> { feature, layer, item, bbox, searchText }
 const zones = new Map();
 const state = {
-  selectedId: null,
+  selectedIds: new Set(), // zones picked by a map/list click (may be several at one point)
   overlapIds: new Set(),
   flightLayer: null,
   flightShape: null,   // 'polygon' | 'circle'
@@ -86,6 +86,26 @@ const zonesGroup = L.geoJSON(null, {
   onEachFeature: (feature, layer) => registerZone(feature, layer),
 }).addTo(map);
 
+// Clicking empty map (not on any zone layer) runs the same point query, which
+// clears the selection when nothing is there. Guarded while drawing/editing.
+map.on('click', (e) => selectAtPoint(e.latlng));
+
+// Live coordinate readout — always shows the cursor's lat/lng as it moves.
+const coordControl = L.control({ position: 'bottomleft' });
+coordControl.onAdd = function () {
+  this._div = L.DomUtil.create('div', 'coord-readout');
+  this._div.innerHTML = '<span class="cr-label">Lat, Lng</span> —';
+  return this._div;
+};
+coordControl.update = function (latlng) {
+  this._div.innerHTML = latlng
+    ? `<span class="cr-label">Lat, Lng</span> ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`
+    : '<span class="cr-label">Lat, Lng</span> —';
+};
+coordControl.addTo(map);
+map.on('mousemove', (e) => coordControl.update(e.latlng));
+map.on('mouseout', () => coordControl.update(null));
+
 // =================================================================== //
 //  Data loading
 // =================================================================== //
@@ -98,7 +118,7 @@ async function loadZones({ refresh = false } = {}) {
 
     zones.clear();
     zonesGroup.clearLayers();
-    state.selectedId = null;
+    state.selectedIds = new Set();
     state.overlapIds.clear();
     // Must be set BEFORE addData so registerZone/styleFor can flag new/CTR zones.
     state.newZones = new Set((meta && meta.dataset && meta.dataset.newZones) || []);
@@ -208,8 +228,9 @@ function registerZone(feature, layer) {
   zones.set(key, record);
 
   layer.setStyle(styleFor(key)); // paints new zones with the "new" style up front
-  layer.bindPopup(popupHtml(feature), { maxWidth: 280 });
-  layer.on('click', () => selectZone(key, { pan: false }));
+  // Click a zone → select EVERY restriction stacked at that exact point (not just
+  // the top layer). Map clicks on empty areas clear the selection (see map 'click').
+  layer.on('click', (e) => { L.DomEvent.stop(e); selectAtPoint(e.latlng); });
 }
 
 // =================================================================== //
@@ -311,7 +332,7 @@ function zoomToNewZones() {
 //  Selection & styling
 // =================================================================== //
 function styleFor(id) {
-  if (id === state.selectedId) return STYLE.selected;
+  if (state.selectedIds.has(id)) return STYLE.selected;
   if (state.overlapIds.has(id)) return STYLE.overlap;
   const r = zones.get(id);
   if (r && r.isNotam) return STYLE.notam;
@@ -326,29 +347,78 @@ function restyleZone(id) {
   if (!r) return;
   r.layer.setStyle(styleFor(id));
   if (r.item) {
-    r.item.classList.toggle('selected', id === state.selectedId);
-    r.item.classList.toggle('overlap', state.overlapIds.has(id) && id !== state.selectedId);
+    r.item.classList.toggle('selected', state.selectedIds.has(id));
+    r.item.classList.toggle('overlap', state.overlapIds.has(id) && !state.selectedIds.has(id));
   }
 }
 
-function selectZone(id, { pan = false } = {}) {
-  const prev = state.selectedId;
-  if (prev === id) {
-    // Re-center on repeat clicks from the list, otherwise no-op.
-    if (pan) panToZone(id);
+// Replace the current selection with `ids` (a Set), restyling only what changed
+// and bringing the newly-selected layers to the front.
+function applySelection(ids) {
+  const prev = state.selectedIds || new Set();
+  state.selectedIds = ids;
+  new Set([...prev, ...ids]).forEach(restyleZone);
+  ids.forEach((id) => {
+    const r = zones.get(id);
+    if (r) r.layer.bringToFront();
+  });
+}
+
+// True while the user is drawing or editing the flying zone — map clicks then
+// belong to Geoman, not to zone selection.
+function isBusyDrawing() {
+  return (
+    (map.pm.globalDrawModeEnabled && map.pm.globalDrawModeEnabled()) ||
+    (state.flightLayer && state.flightLayer.pm && state.flightLayer.pm.enabled())
+  );
+}
+
+// Select EVERY restriction whose polygon contains the clicked point, list them all
+// in a popup at that point, and highlight them all in the right-hand list.
+function selectAtPoint(latlng) {
+  if (isBusyDrawing()) return;
+  const lng = latlng.lng, lat = latlng.lat;
+  const pt = turf.point([lng, lat]);
+  const matches = [];
+  zones.forEach((r, id) => {
+    const b = r.bbox; // quick reject via bbox before the point-in-polygon test
+    if (lng < b[0] || lng > b[2] || lat < b[1] || lat > b[3]) return;
+    try {
+      if (turf.booleanPointInPolygon(pt, r.feature)) matches.push(id);
+    } catch {
+      /* skip degenerate geometry */
+    }
+  });
+
+  if (!matches.length) {
+    applySelection(new Set());
+    map.closePopup();
     return;
   }
-  state.selectedId = id;
-  if (prev) restyleZone(prev);
-  restyleZone(id);
 
+  const ordered = matches.sort((a, b) =>
+    (zones.get(a).feature.properties.zone_id || '').localeCompare(
+      zones.get(b).feature.properties.zone_id || '', undefined, { numeric: true }
+    )
+  );
+  applySelection(new Set(ordered));
+  const first = zones.get(ordered[0]);
+  if (first && first.item) first.item.scrollIntoView({ block: 'nearest' });
+  L.popup({ maxWidth: 320 })
+    .setLatLng(latlng)
+    .setContent(pointPopupHtml(ordered, latlng))
+    .openOn(map);
+}
+
+// Backwards-compatible single-zone select used by the list + overlap cards.
+function selectZone(id, { pan = false } = {}) {
+  applySelection(new Set([id]));
   const r = zones.get(id);
-  if (r) {
-    r.layer.bringToFront();
-    if (r.item) r.item.scrollIntoView({ block: 'nearest' });
-    if (pan) panToZone(id);
-    else r.layer.openPopup();
-  }
+  if (!r) return;
+  r.layer.bringToFront();
+  if (r.item) r.item.scrollIntoView({ block: 'nearest' });
+  if (pan) panToZone(id);
+  else r.layer.openPopup();
 }
 
 function panToZone(id) {
@@ -646,6 +716,39 @@ function popupHtml(feature) {
     <b>Status:</b> ${escapeHtml(p.status || '?')}<br>
     <b>Contact:</b> ${escapeHtml(p.contact || '—')}
   </div>`;
+}
+
+// Combined popup listing every restriction stacked at a clicked point.
+function pointPopupHtml(ids, latlng) {
+  const head =
+    `<div class="pt-pop-head"><b>${ids.length} restriction${ids.length > 1 ? 's' : ''} here</b>` +
+    `<span class="pt-pop-coord">${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}</span></div>`;
+  return `<div class="pt-pop">${head}<div class="pt-pop-list">${ids.map(pointRowHtml).join('')}</div></div>`;
+}
+
+function pointRowHtml(id) {
+  const r = zones.get(id);
+  const p = (r && r.feature.properties) || {};
+  let tag = '';
+  if (r && r.isNotam) {
+    const t = NOTAM_TIP[p.notam_tip] || p.notam_tip || '';
+    tag = `<span class="notam-pill">NOTAM${t ? ' · ' + escapeHtml(t) : ''}</span>` +
+      (p.notam_state === 'active' ? ' <span class="notam-active">ACTIVE</span>' : '');
+  } else if (r && r.isPermanent) {
+    tag = `<span class="perm-pill">${p.kind === 'prohibited' ? 'PROHIBITED' : 'RESTRICTED'}</span>`;
+  } else if (r && r.isCtr) {
+    tag = '<span class="ctr-pill">CTR</span>';
+  } else if (r && r.isNew) {
+    tag = '<span class="new-pill">NEW</span>';
+  }
+  const validity = r && r.isNotam
+    ? `<div class="pt-row-sub">🕑 ${escapeHtml(formatNotamValidity(p.notam_from, p.notam_to))}</div>`
+    : '';
+  return `<div class="pt-row">
+      <div class="pt-row-top"><span>${escapeHtml(p.zone_id || '—')} ${tag}</span>
+        <span class="zi-alt">${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}</span></div>
+      ${validity}
+    </div>`;
 }
 
 function formatArea(m2) {
