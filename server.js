@@ -18,6 +18,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 const supa = require('./lib/supabase');
 const billing = require('./lib/stripe');
 
@@ -86,21 +87,44 @@ function isFeatureCollection(json) {
   );
 }
 
+// ROMATSA's TLS endpoint (an old Jetty) negotiates a weak (<2048-bit) Diffie-
+// Hellman key that modern OpenSSL rejects with ERR_SSL_DH_KEY_TOO_SMALL from
+// datacenter hosts like Render — even though the same request succeeds from other
+// networks. The server also offers plain-RSA key-exchange GCM ciphers (no DH), so
+// we pin those to sidestep the weak-DH path entirely while KEEPING full
+// certificate validation (rejectUnauthorized stays true). Used for both feeds.
+function fetchRomatsaJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(
+      url,
+      {
+        ciphers: 'AES256-GCM-SHA384:AES128-GCM-SHA256',
+        headers: { 'User-Agent': 'DronesRestrictedZonesRO/1.0 (+github.com/TechReckoning)' },
+      },
+      (res) => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          res.resume();
+          reject(new Error(`source responded ${res.statusCode} ${res.statusMessage || ''}`.trim()));
+          return;
+        }
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => { data += c; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch (e) { reject(new Error('source payload was not valid JSON: ' + e.message)); }
+        });
+      }
+    );
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`request timed out after ${timeoutMs}ms`)));
+    req.on('error', reject);
+  });
+}
+
 async function fetchZonesFromSource() {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(SOURCE_URL, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'DronesRestrictedZonesRO/1.0 (+github.com/TechReckoning)' },
-    });
-    if (!res.ok) throw new Error(`source responded ${res.status} ${res.statusText}`);
-    const json = await res.json();
-    if (!isFeatureCollection(json)) throw new Error('source payload is not a non-empty FeatureCollection');
-    return json;
-  } finally {
-    clearTimeout(timer);
-  }
+  const json = await fetchRomatsaJson(SOURCE_URL);
+  if (!isFeatureCollection(json)) throw new Error('source payload is not a non-empty FeatureCollection');
+  return json;
 }
 
 async function readSnapshot() {
@@ -196,12 +220,8 @@ app.get('/api/notams', async (req, res) => {
     return res.json({ meta: { source: 'live-cache', fetchedAt: new Date(notamCache.ts).toISOString(), count: notamCache.data.features.length }, geojson: notamCache.data });
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const r = await fetch(NOTAM_SOURCE_URL, { signal: controller.signal, headers: { 'User-Agent': 'DronesRestrictedZonesRO/1.0 (+github.com/TechReckoning)' } });
-    if (!r.ok) throw new Error(`source responded ${r.status} ${r.statusText}`);
-    const json = await r.json();
+    const json = await fetchRomatsaJson(NOTAM_SOURCE_URL);
     if (!isFeatureCollection(json)) throw new Error('NOTAM source payload is not a non-empty FeatureCollection');
     notamCache = { data: json, ts: now };
     fs.promises.writeFile(NOTAM_SNAPSHOT_PATH, JSON.stringify(json)).catch(() => {});
@@ -218,8 +238,6 @@ app.get('/api/notams', async (req, res) => {
     } catch (snapErr) {
       return res.status(502).json({ error: 'Could not fetch live NOTAMs and no usable snapshot.', detail: reason, snapshotError: snapErr.message });
     }
-  } finally {
-    clearTimeout(timer);
   }
 });
 
