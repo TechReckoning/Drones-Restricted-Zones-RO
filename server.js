@@ -41,8 +41,17 @@ const DATASET_META_PATH = path.join(__dirname, 'data', 'dataset-meta.json');
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const FETCH_TIMEOUT_MS = 20 * 1000;
 
+// NOTAMs (time-limited restrictions). Live source is a ROMATSA GeoServer WFS
+// endpoint — set NOTAM_SOURCE_URL to enable live fetching; otherwise the bundled
+// snapshot is served. Cached briefly because NOTAMs change often.
+const NOTAM_SOURCE_URL = process.env.NOTAM_SOURCE_URL || '';
+const NOTAM_SNAPSHOT_PATH = path.join(__dirname, 'data', 'notams.snapshot.json');
+const NOTAM_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
 /** @type {{ data: any, ts: number }} */
 let cache = { data: null, ts: 0 };
+/** @type {{ data: any, ts: number }} */
+let notamCache = { data: null, ts: 0 };
 
 /**
  * Manually-maintained dataset provenance (the ROMATSA feed itself carries no
@@ -151,6 +160,57 @@ app.get('/api/zones', async (req, res) => {
         snapshotError: snapErr.message,
       });
     }
+  }
+});
+
+// NOTAMs — proxied live from the ROMATSA WFS endpoint when configured, otherwise
+// served from the bundled snapshot. Same cache-with-snapshot-fallback shape as /api/zones.
+async function readNotamSnapshot() {
+  const json = JSON.parse(await fs.promises.readFile(NOTAM_SNAPSHOT_PATH, 'utf8'));
+  if (!isFeatureCollection(json)) throw new Error('NOTAM snapshot is not a valid FeatureCollection');
+  return json;
+}
+
+app.get('/api/notams', async (req, res) => {
+  const force = 'refresh' in req.query;
+  const now = Date.now();
+
+  if (!NOTAM_SOURCE_URL) {
+    try {
+      const snap = await readNotamSnapshot();
+      return res.json({ meta: { source: 'snapshot', fetchedAt: null, count: snap.features.length }, geojson: snap });
+    } catch (err) {
+      return res.status(502).json({ error: 'No NOTAM source configured and snapshot unavailable.', detail: err.message });
+    }
+  }
+
+  if (!force && notamCache.data && now - notamCache.ts < NOTAM_CACHE_TTL_MS) {
+    return res.json({ meta: { source: 'live-cache', fetchedAt: new Date(notamCache.ts).toISOString(), count: notamCache.data.features.length }, geojson: notamCache.data });
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(NOTAM_SOURCE_URL, { signal: controller.signal, headers: { 'User-Agent': 'DronesRestrictedZonesRO/1.0 (+github.com/TechReckoning)' } });
+    if (!r.ok) throw new Error(`source responded ${r.status} ${r.statusText}`);
+    const json = await r.json();
+    if (!isFeatureCollection(json)) throw new Error('NOTAM source payload is not a non-empty FeatureCollection');
+    notamCache = { data: json, ts: now };
+    fs.promises.writeFile(NOTAM_SNAPSHOT_PATH, JSON.stringify(json)).catch(() => {});
+    return res.json({ meta: { source: 'live', fetchedAt: new Date(now).toISOString(), count: json.features.length }, geojson: json });
+  } catch (err) {
+    console.warn('[notams] live fetch failed, falling back:', err.message);
+    if (notamCache.data) {
+      return res.json({ meta: { source: 'stale-cache', fetchedAt: new Date(notamCache.ts).toISOString(), count: notamCache.data.features.length, warning: err.message }, geojson: notamCache.data });
+    }
+    try {
+      const snap = await readNotamSnapshot();
+      return res.json({ meta: { source: 'snapshot', fetchedAt: null, count: snap.features.length, warning: err.message }, geojson: snap });
+    } catch (snapErr) {
+      return res.status(502).json({ error: 'Could not fetch live NOTAMs and no usable snapshot.', detail: err.message, snapshotError: snapErr.message });
+    }
+  } finally {
+    clearTimeout(timer);
   }
 });
 

@@ -85,8 +85,8 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .chip:hover { background: rgba(8, 145, 178, 0.32); }
 .chip.active { background: #06b6d4; color: #06232b; border-color: #06b6d4; }
 
-/* "NEW" / "CTR" / permanent pills on zones in the list */
-.new-pill, .ctr-pill, .perm-pill {
+/* "NEW" / "CTR" / permanent / NOTAM pills on zones in the list */
+.new-pill, .ctr-pill, .perm-pill, .notam-pill, .notam-active {
   display: inline-block;
   font-size: 9px;
   font-weight: 800;
@@ -100,9 +100,13 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .new-pill { background: #0891b2; }
 .ctr-pill { background: #7c3aed; }
 .perm-pill { background: #db2777; }
+.notam-pill { background: #b45309; }
+.notam-active { background: #16a34a; margin-left: 4px; }
 /* Category left-accents in the list (selection/overlap still take precedence). */
 .zone-item.is-ctr { border-left-color: #7c3aed; }
 .zone-item.is-permanent { border-left-color: #db2777; }
+.zone-item.is-notam { border-left-color: #b45309; }
+.overlap-card.oc-notam { border-left-color: #b45309; background: #fffbeb; border-color: #fde68a; }
 
 /* ---------- Layout ---------- */
 .layout { flex: 1 1 auto; display: flex; min-height: 0; }

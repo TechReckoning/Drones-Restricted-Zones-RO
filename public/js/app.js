@@ -25,6 +25,7 @@ const STYLE = {
   isNew:    { color: '#0891b2', weight: 3, opacity: 1,   fillColor: '#06b6d4', fillOpacity: 0.25, dashArray: '5,4' },
   ctr:      { color: '#7c3aed', weight: 2, opacity: 1,   fillColor: '#8b5cf6', fillOpacity: 0.28, dashArray: null },
   permanent:{ color: '#db2777', weight: 2, opacity: 1,   fillColor: '#ec4899', fillOpacity: 0.30, dashArray: null },
+  notam:    { color: '#b45309', weight: 2, opacity: 1,   fillColor: '#f59e0b', fillOpacity: 0.28, dashArray: '6,4' },
 };
 
 // zone key -> { feature, layer, item, bbox, searchText }
@@ -114,6 +115,9 @@ async function loadZones({ refresh = false } = {}) {
       console.warn('permanent zones failed to load:', e.message);
     }
 
+    // Merge active + upcoming NOTAMs (time-limited restrictions).
+    await loadNotams();
+
     renderZoneList();
     els.zoneCount.textContent = zones.size;
     applyStatusMeta(meta);
@@ -123,6 +127,68 @@ async function loadZones({ refresh = false } = {}) {
     setStatus('error', 'Failed to load zones');
     els.zoneList.innerHTML = `<div class="zone-list-empty">Could not load restricted zones.<br>${escapeHtml(err.message)}</div>`;
   }
+}
+
+// Fetch NOTAMs, keep active + upcoming (drop expired), normalise each into the
+// common zone property shape, and add them to the map/list.
+async function loadNotams() {
+  try {
+    const { geojson } = await (await fetch('/api/notams')).json();
+    if (!geojson || !Array.isArray(geojson.features)) return;
+    const now = Date.now();
+    const features = geojson.features
+      .map((f) => normalizeNotam(f, now))
+      .filter((f) => f && f.properties.notam_state !== 'expired');
+    if (features.length) zonesGroup.addData({ type: 'FeatureCollection', features });
+    state.notamCount = features.length;
+  } catch (e) {
+    console.warn('NOTAMs failed to load:', e.message);
+  }
+}
+
+const NOTAM_TIP = { R: 'Restricted', D: 'Danger', O: 'Other' };
+
+// Turn a raw ROMATSA NOTAM feature into the shared zone property shape.
+function normalizeNotam(f, now) {
+  const p = f.properties || {};
+  if (!f.geometry) return null;
+  const from = Date.parse(p.dfrom);
+  const to = Date.parse(p.dto);
+  let stateName = 'active';
+  if (isFinite(to) && to < now) stateName = 'expired';
+  else if (isFinite(from) && from > now) stateName = 'upcoming';
+
+  const msg = (p.mesaj || '').replace(/\r/g, ' ');
+  const fg = msg.match(/\bF\)\s*([\s\S]*?)\s*\bG\)\s*([\s\S]*?)\s*\)?\s*$/);
+  const lower = fg ? fg[1].trim() : 'GND';
+  const upper = fg ? fg[2].trim() : '';
+  const eMatch = msg.match(/\bE\)\s*([\s\S]*?)\s*(?=\bF\)|\bG\)|$)/);
+  const desc = eMatch ? eMatch[1].replace(/\s+/g, ' ').trim() : '';
+
+  return {
+    type: 'Feature',
+    id: f.id,
+    geometry: f.geometry,
+    properties: {
+      zone_id: p.serie || 'NOTAM',
+      lower_lim: lower || 'GND',
+      upper_lim: upper || '',
+      contact: desc,
+      status: 'NOTAM',
+      category: 'notam',
+      notam_tip: p.tip || '',
+      notam_from: p.dfrom || null,
+      notam_to: p.dto || null,
+      notam_state: stateName,
+    },
+  };
+}
+
+// "3 Aug 07:00Z → 3 Aug 14:30Z" (times in UTC, as NOTAMs are published).
+function formatNotamValidity(from, to) {
+  const opts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+  const fmt = (s) => (s ? new Date(s).toLocaleString('en-GB', opts) + 'Z' : '?');
+  return `${fmt(from)} → ${fmt(to)}`;
 }
 
 function registerZone(feature, layer) {
@@ -135,8 +201,9 @@ function registerZone(feature, layer) {
     isNew: state.newZones.has(p.zone_id),
     isCtr: state.ctrZones.has(p.zone_id),
     isPermanent: p.category === 'permanent',
+    isNotam: p.category === 'notam',
     bbox: turf.bbox(feature), // [minX, minY, maxX, maxY]
-    searchText: `${p.zone_id || ''} ${p.contact || ''} ${p.lower_lim || ''} ${p.upper_lim || ''}`.toLowerCase(),
+    searchText: `${p.zone_id || ''} ${p.status || ''} ${p.contact || ''} ${p.lower_lim || ''} ${p.upper_lim || ''}`.toLowerCase(),
   };
   zones.set(key, record);
 
@@ -160,6 +227,16 @@ function renderZoneList() {
   const html = sorted
     .map(([key, r]) => {
       const p = r.feature.properties || {};
+      if (r.isNotam) {
+        const active = p.notam_state === 'active';
+        const type = NOTAM_TIP[p.notam_tip] || p.notam_tip || '';
+        const validity = formatNotamValidity(p.notam_from, p.notam_to);
+        return `<div class="zone-item is-notam" data-id="${escapeHtml(key)}" role="option">
+          <div class="zi-title"><span>${escapeHtml(p.zone_id || 'NOTAM')} <span class="notam-pill">NOTAM${type ? ' · ' + escapeHtml(type) : ''}</span>${active ? ' <span class="notam-active">ACTIVE</span>' : ''}</span>
+            <span class="zi-alt">${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}</span></div>
+          <div class="zi-contact">🕑 ${escapeHtml(validity)}${p.contact ? ' · ' + escapeHtml(p.contact) : ''}</div>
+        </div>`;
+      }
       const newPill = r.isNew
         ? ` <span class="new-pill" title="Added ${escapeHtml(state.datasetValidFrom || '')}">NEW</span>`
         : '';
@@ -237,6 +314,7 @@ function styleFor(id) {
   if (id === state.selectedId) return STYLE.selected;
   if (state.overlapIds.has(id)) return STYLE.overlap;
   const r = zones.get(id);
+  if (r && r.isNotam) return STYLE.notam;
   if (r && r.isPermanent) return STYLE.permanent;
   if (r && r.isNew) return STYLE.isNew;
   if (r && r.isCtr) return STYLE.ctr;
@@ -500,10 +578,18 @@ function renderOverlaps(overlaps) {
     .map((o) => {
       const p = o.feature.properties || {};
       const areaTxt = o.overlapArea != null ? `<span class="zi-alt">${formatArea(o.overlapArea)}</span>` : '';
-      return `<div class="overlap-card" data-id="${escapeHtml(o.id)}">
+      const isNotam = p.category === 'notam';
+      const statusTxt = isNotam
+        ? `NOTAM${p.notam_tip ? ' · ' + escapeHtml(NOTAM_TIP[p.notam_tip] || p.notam_tip) : ''}${p.notam_state === 'active' ? ' (ACTIVE)' : ' (upcoming)'}`
+        : escapeHtml(p.status || '?');
+      const validityRow = isNotam
+        ? `<div class="oc-row"><strong>Valid:</strong> ${escapeHtml(formatNotamValidity(p.notam_from, p.notam_to))}</div>`
+        : '';
+      return `<div class="overlap-card${isNotam ? ' oc-notam' : ''}" data-id="${escapeHtml(o.id)}">
         <div class="oc-title"><span>${escapeHtml(p.zone_id || '—')}</span>${areaTxt}</div>
         <div class="oc-row"><strong>Altitude:</strong> ${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}</div>
-        <div class="oc-row"><strong>Status:</strong> ${escapeHtml(p.status || '?')}</div>
+        <div class="oc-row"><strong>Status:</strong> ${statusTxt}</div>
+        ${validityRow}
         <div class="oc-contact">${escapeHtml(p.contact || '')}</div>
       </div>`;
     })
@@ -544,6 +630,16 @@ els.refresh.addEventListener('click', () => loadZones({ refresh: true }));
 // =================================================================== //
 function popupHtml(feature) {
   const p = feature.properties || {};
+  if (p.category === 'notam') {
+    const type = NOTAM_TIP[p.notam_tip] || p.notam_tip || '';
+    return `<div>
+      <b>NOTAM ${escapeHtml(p.zone_id || '')}</b>${type ? ' · ' + escapeHtml(type) : ''}
+      ${p.notam_state === 'active' ? ' <b style="color:#b45309">ACTIVE</b>' : ''}<br>
+      <b>Valid:</b> ${escapeHtml(formatNotamValidity(p.notam_from, p.notam_to))}<br>
+      <b>Altitude:</b> ${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}<br>
+      ${p.contact ? escapeHtml(p.contact) : ''}
+    </div>`;
+  }
   return `<div>
     <b>${escapeHtml(p.zone_id || 'Restricted zone')}</b><br>
     <b>Altitude:</b> ${escapeHtml(p.lower_lim || '?')} – ${escapeHtml(p.upper_lim || '?')}<br>
