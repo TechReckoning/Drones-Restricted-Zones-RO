@@ -171,6 +171,14 @@ async function readNotamSnapshot() {
   return json;
 }
 
+// Node's fetch throws a generic "fetch failed"; the real reason (ECONNREFUSED,
+// UND_ERR_CONNECT_TIMEOUT, cert errors, host firewall drop) is on err.cause.
+function describeFetchError(err) {
+  const c = err && err.cause;
+  if (c && (c.code || c.message)) return `${err.message} (${c.code || ''}${c.code && c.message ? ': ' : ''}${c.message || ''})`;
+  return err ? err.message : 'unknown error';
+}
+
 app.get('/api/notams', async (req, res) => {
   const force = 'refresh' in req.query;
   const now = Date.now();
@@ -199,15 +207,16 @@ app.get('/api/notams', async (req, res) => {
     fs.promises.writeFile(NOTAM_SNAPSHOT_PATH, JSON.stringify(json)).catch(() => {});
     return res.json({ meta: { source: 'live', fetchedAt: new Date(now).toISOString(), count: json.features.length }, geojson: json });
   } catch (err) {
-    console.warn('[notams] live fetch failed, falling back:', err.message);
+    const reason = describeFetchError(err);
+    console.warn('[notams] live fetch failed, falling back:', reason);
     if (notamCache.data) {
-      return res.json({ meta: { source: 'stale-cache', fetchedAt: new Date(notamCache.ts).toISOString(), count: notamCache.data.features.length, warning: err.message }, geojson: notamCache.data });
+      return res.json({ meta: { source: 'stale-cache', fetchedAt: new Date(notamCache.ts).toISOString(), count: notamCache.data.features.length, warning: reason }, geojson: notamCache.data });
     }
     try {
       const snap = await readNotamSnapshot();
-      return res.json({ meta: { source: 'snapshot', fetchedAt: null, count: snap.features.length, warning: err.message }, geojson: snap });
+      return res.json({ meta: { source: 'snapshot', fetchedAt: null, count: snap.features.length, warning: reason }, geojson: snap });
     } catch (snapErr) {
-      return res.status(502).json({ error: 'Could not fetch live NOTAMs and no usable snapshot.', detail: err.message, snapshotError: snapErr.message });
+      return res.status(502).json({ error: 'Could not fetch live NOTAMs and no usable snapshot.', detail: reason, snapshotError: snapErr.message });
     }
   } finally {
     clearTimeout(timer);
