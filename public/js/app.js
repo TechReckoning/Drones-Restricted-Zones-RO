@@ -230,7 +230,13 @@ function registerZone(feature, layer) {
   layer.setStyle(styleFor(key)); // paints new zones with the "new" style up front
   // Click a zone → select EVERY restriction stacked at that exact point (not just
   // the top layer). Map clicks on empty areas clear the selection (see map 'click').
-  layer.on('click', (e) => { L.DomEvent.stop(e); selectAtPoint(e.latlng); });
+  // While drawing/editing a flying zone we must NOT swallow the click — let it
+  // bubble to Geoman so a vertex can be placed even over a restriction.
+  layer.on('click', (e) => {
+    if (isBusyDrawing()) return;
+    L.DomEvent.stop(e);
+    selectAtPoint(e.latlng);
+  });
 }
 
 // =================================================================== //
