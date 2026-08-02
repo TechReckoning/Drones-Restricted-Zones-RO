@@ -575,3 +575,119 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   .map-wrap { height: 55vh; min-height: 360px; }
   .panel-body, .zone-list { max-height: 40vh; }
 }
+
+/* ================================================================= *
+ *  DARK / FUTURISTIC THEME
+ *  Purely visual: overrides colours/surfaces on top of the existing
+ *  rules. No layout, structure or behaviour is changed. The map tiles
+ *  stay as-is; everything around them goes dark.
+ * ================================================================= */
+:root {
+  color-scheme: dark;
+  --bg: #060a13;            /* header / footer / deepest */
+  --panel-bg: #0d1524;      /* side panels, modals */
+  --panel-border: #223148;  /* subtle borders */
+  --text: #e6eefb;
+  --muted: #93a4be;
+  --primary: #3b82f6;
+  --primary-dark: #2563eb;
+  --surface-2: #101a2e;     /* insets: stats, headers, inputs */
+  --surface-3: #17233b;     /* hover */
+  --accent: #22d3ee;        /* neon cyan */
+}
+
+html, body {
+  background:
+    radial-gradient(900px 500px at 15% -10%, rgba(34, 211, 238, 0.10), transparent 60%),
+    radial-gradient(800px 460px at 100% 0%, rgba(167, 139, 250, 0.10), transparent 55%),
+    var(--bg);
+}
+
+/* Header + footer: add a thin cyan edge glow for the "instrument" feel */
+.app-header {
+  background: linear-gradient(180deg, #0a1120, #070c16);
+  border-bottom: 1px solid rgba(34, 211, 238, 0.22);
+  box-shadow: 0 1px 18px rgba(34, 211, 238, 0.08), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.app-footer { background: #070c16; border-top: 1px solid var(--panel-border); }
+.header-divider { background: var(--panel-border); }
+
+/* Buttons */
+.btn { background: var(--surface-2); color: var(--text); border-color: transparent; }
+.btn:hover:not(:disabled) { background: var(--surface-3); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--primary));
+  color: #04121f;
+  box-shadow: 0 2px 14px rgba(34, 211, 238, 0.22);
+}
+.btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #38dcf0, #4b8ef7); box-shadow: 0 4px 20px rgba(34, 211, 238, 0.36); }
+.btn-ghost { background: rgba(148, 163, 184, 0.06); border-color: var(--panel-border); color: var(--text); }
+.btn-ghost:hover:not(:disabled) { background: rgba(148, 163, 184, 0.14); }
+
+/* Insets / surfaces that were light */
+.stat { background: var(--surface-2); }
+.count { background: var(--surface-2); }
+.coords-list { color: #c6d3e8; }
+.zgroup-head { background: var(--surface-2); color: #cdd9ee; border-bottom-color: var(--panel-border); }
+.zgroup-head:hover { background: var(--surface-3); }
+.zg-count { background: var(--surface-3); color: #b9c6dc; }
+.zsub-head { background: #0b1322; color: var(--muted); border-bottom-color: var(--panel-border); }
+.zone-item { border-bottom-color: rgba(148, 163, 184, 0.08); }
+.zone-item:hover { background: var(--surface-2); }
+.zone-item.selected { background: rgba(249, 115, 22, 0.14); }
+.zone-item.overlap { background: rgba(220, 38, 38, 0.16); }
+.zd-val { color: #c6d3e8; }
+.zd-raw { background: var(--surface-2); color: #b9c6dc; border-color: var(--panel-border); }
+.zi-zoom { background: rgba(59, 130, 246, 0.16); color: #93c5fd; border-color: rgba(59, 130, 246, 0.4); }
+.zi-zoom:hover { background: rgba(59, 130, 246, 0.28); }
+
+/* Inputs / search / selects */
+.search, .circle-radius-row input, .circle-radius-row select,
+.lib-field input, .lib-field select, .lib-field textarea {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--panel-border);
+}
+.search::placeholder, .lib-field input::placeholder, .lib-field textarea::placeholder { color: #62748e; }
+
+/* Overlap cards (danger-tinted, now dark) */
+.overlap-card { background: rgba(220, 38, 38, 0.12); border-color: rgba(220, 38, 38, 0.34); }
+.overlap-card:hover { background: rgba(220, 38, 38, 0.2); }
+.overlap-card .oc-row { color: #cbd6e8; }
+.overlap-card.oc-notam { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.34); }
+
+/* Modals */
+.modal { background: var(--panel-bg); border: 1px solid var(--panel-border); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); }
+.modal-overlay { background: rgba(3, 7, 15, 0.68); }
+
+/* Billing banner + plan cards */
+.billing-banner { background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.34); color: #bfdbfe; }
+.billing-banner.locked { background: rgba(220, 38, 38, 0.14); border-color: rgba(220, 38, 38, 0.4); color: #fecaca; }
+.plan-card { background: var(--surface-2); }
+.plan-card:hover { border-color: var(--accent); box-shadow: 0 2px 16px rgba(34, 211, 238, 0.22); }
+.plan-card-featured { border-color: var(--accent); }
+.plan-card:disabled:hover { border-color: var(--panel-border); }
+
+/* Danger button */
+.btn-danger { border-color: rgba(220, 38, 38, 0.45); }
+.btn-danger:hover:not(:disabled) { background: rgba(220, 38, 38, 0.16); }
+
+/* Leaflet: dark popups + controls (map tiles themselves unchanged) */
+.leaflet-container { background: #0a1220; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel-bg); color: var(--text); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55); }
+.leaflet-popup-content b { color: #93c5fd; }
+.leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+.leaflet-container a.leaflet-popup-close-button:hover { color: var(--text); }
+.leaflet-bar a, .leaflet-bar a:hover {
+  background: #0d1524; color: var(--text); border-bottom-color: var(--panel-border);
+}
+.leaflet-bar a:hover { background: var(--surface-3); }
+.leaflet-control-attribution { background: rgba(13, 21, 36, 0.82) !important; color: #8ba0bd !important; }
+.leaflet-control-attribution a { color: #93c5fd !important; }
+.pt-row { border-left-color: var(--panel-border); }
+
+/* Focus rings → cyan */
+.search:focus, .circle-radius-row input:focus, .circle-radius-row select:focus,
+.lib-field input:focus, .lib-field select:focus, .lib-field textarea:focus {
+  outline-color: var(--accent);
+}

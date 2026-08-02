@@ -703,6 +703,11 @@ app.post('/api/billing/sync', requireUser, async (req, res) => {
   }
 });
 
+// Landing page at "/", the interactive map app at "/app". Registered before the
+// static middleware so "/" serves the landing rather than index.html.
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landing.html')));
+app.get(['/app', '/app/'], (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
 // Clean URLs for the legal/policy pages (Phase 4).
 ['privacy', 'cookies', 'consumer'].forEach((page) => {
   app.get('/' + page, (req, res) => res.sendFile(path.join(__dirname, 'public', 'legal', page + '.html')));
