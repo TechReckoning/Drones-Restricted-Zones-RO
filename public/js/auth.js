@@ -111,9 +111,21 @@ function wireUi() {
     el('signin-status').textContent = 'Sending…';
     const { error } = await auth.signIn(email);
     el('signin-status').textContent = error
-      ? `Error: ${error.message}`
+      ? friendlyAuthError(error)
       : '✓ Check your email for the sign-in link.';
   });
+}
+
+// Turn raw Supabase auth errors into friendly, actionable messages.
+function friendlyAuthError(error) {
+  const msg = (error && error.message) || '';
+  if ((error && error.status === 429) || /rate limit/i.test(msg)) {
+    return '⏳ Too many sign-in emails right now. Please wait a few minutes, then try again.';
+  }
+  if (/valid email|invalid.*email|email.*invalid/i.test(msg)) {
+    return 'That email address doesn\'t look valid — please check it and try again.';
+  }
+  return 'Could not send the link — please try again in a moment.';
 }
 
 export function openModal(id, after) {
