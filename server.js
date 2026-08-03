@@ -566,8 +566,8 @@ app.post('/api/billing/checkout', requireUser, async (req, res) => {
           optional: false,
         },
       ],
-      success_url: `${base}/?checkout=success`,
-      cancel_url: `${base}/?checkout=cancel`,
+      success_url: `${base}/app?checkout=success`,
+      cancel_url: `${base}/app?checkout=cancel`,
     });
     res.json({ url: session.url });
   } catch (err) {
@@ -584,7 +584,7 @@ app.post('/api/billing/portal', requireUser, async (req, res) => {
   try {
     const session = await billing.stripe.billingPortal.sessions.create({
       customer: row.stripe_customer_id,
-      return_url: publicBase(),
+      return_url: `${publicBase()}/app`,
     });
     res.json({ url: session.url });
   } catch (err) {

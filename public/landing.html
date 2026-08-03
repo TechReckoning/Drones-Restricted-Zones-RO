@@ -3,6 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Auth safety-net: if a Supabase magic link lands here (its fallback Site URL
+       is "/"), forward the token straight to the app page, which processes it. -->
+  <script>
+    (function () {
+      var q = location.search, h = location.hash;
+      if (/[#?&](access_token|code|error)=|type=(magiclink|recovery|signup|invite|email)/.test(q + h)) {
+        location.replace('/app' + q + h);
+      }
+    })();
+  </script>
   <title>Drones Restricted Zones RO — Romanian UAV airspace, live</title>
   <meta name="description" content="Live map of Romania's UAV restricted airspace — ROMATSA restricted zones, control zones, permanent prohibitions and NOTAMs. Plan flying zones, check overlaps and generate official flight-approval requests." />
   <link rel="icon" type="image/png" href="/img/favicon.png" />

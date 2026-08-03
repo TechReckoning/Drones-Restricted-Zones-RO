@@ -17,7 +17,9 @@ export const auth = {
   onChange(fn) { changeListeners.push(fn); },
 
   async signIn(email) {
-    return sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    // The magic link must land on the APP page (which loads this auth code and
+    // processes the token), not the static landing page at "/".
+    return sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin + '/app' } });
   },
   async signOut() {
     if (sb) await sb.auth.signOut();
