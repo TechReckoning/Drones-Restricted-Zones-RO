@@ -1,0 +1,103 @@
+<!--
+  Supabase → Authentication → Email Templates → "Magic Link"  (Subject + this HTML).
+  Suggested subject:  Your sign-in link · Drones Restricted Zones RO
+  {{ .ConfirmationURL }} is injected by Supabase and carries the redirect to /app.
+  Table-based + inline styles for broad email-client compatibility.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="supported-color-schemes" content="dark light" />
+  <title>Sign in</title>
+</head>
+<body style="margin:0; padding:0; background:#0b1220; -webkit-text-size-adjust:100%;">
+  <!-- preheader (hidden preview text) -->
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#0b1220;">
+    Your secure, one-time sign-in link for Drones Restricted Zones RO.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#0b1220" style="background:#0b1220;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%; max-width:600px; background:#0f1a2e; border:1px solid #223148; border-radius:16px; overflow:hidden;">
+          <!-- header -->
+          <tr>
+            <td align="center" style="padding:32px 32px 4px 32px;">
+              <img src="https://drones-rz-romania.com/img/logo.png" width="60" height="60" alt="Drones Restricted Zones RO"
+                   style="display:block; width:60px; height:60px; border-radius:50%;" />
+              <div style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#e6eefb; font-size:18px; font-weight:800; letter-spacing:0.2px; margin-top:14px;">
+                Drones Restricted Zones RO
+              </div>
+              <div style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#8ba0bd; font-size:12px; margin-top:2px;">
+                UAV restricted airspace · Romania
+              </div>
+            </td>
+          </tr>
+
+          <!-- body -->
+          <tr>
+            <td style="padding:20px 32px 4px 32px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <h1 style="color:#ffffff; font-size:22px; font-weight:800; margin:12px 0 10px 0;">Sign in to your account</h1>
+              <p style="color:#9fb0c9; font-size:15px; line-height:1.6; margin:0;">
+                Tap the button below to sign in securely — no password needed.
+                This link works once and expires shortly for your safety.
+              </p>
+            </td>
+          </tr>
+
+          <!-- CTA button (bulletproof) -->
+          <tr>
+            <td align="center" style="padding:24px 32px 8px 32px;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ .ConfirmationURL }}" style="height:50px;v-text-anchor:middle;width:240px;" arcsize="24%" fillcolor="#22c55e" stroke="f"><w:anchorlock/><center style="color:#04121f;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Sign in &#8594;</center></v:roundrect><![endif]-->
+              <!--[if !mso]><!-- -->
+              <a href="{{ .ConfirmationURL }}"
+                 style="display:inline-block; background:#22c55e; color:#04121f; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:16px; font-weight:800; text-decoration:none; padding:15px 34px; border-radius:12px;">
+                Sign in &#8594;
+              </a>
+              <!--<![endif]-->
+            </td>
+          </tr>
+
+          <!-- fallback link -->
+          <tr>
+            <td style="padding:14px 32px 4px 32px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <p style="color:#64748b; font-size:12px; margin:0 0 6px 0;">Or paste this link into your browser:</p>
+              <p style="margin:0; font-size:12px; word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" style="color:#38dcf0; text-decoration:underline;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- security note -->
+          <tr>
+            <td style="padding:16px 32px 4px 32px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <p style="color:#64748b; font-size:12px; line-height:1.6; margin:0;">
+                Didn't request this? You can safely ignore this email — someone may have entered your address by mistake, and no account changes were made.
+              </p>
+            </td>
+          </tr>
+
+          <!-- footer -->
+          <tr>
+            <td style="padding:20px 32px 30px 32px; border-top:1px solid #223148; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <p style="color:#64748b; font-size:11px; line-height:1.6; margin:0;">
+                <strong style="color:#93a4be;">Drones Restricted Zones RO</strong> — operated by Zorile Energie S.R.L., Romania.<br />
+                This is a transactional message sent because a sign-in was requested for {{ .Email }}.
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <div style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#3f4b5f; font-size:11px; margin-top:16px;">
+          © Drones Restricted Zones RO · drones-rz-romania.com
+        </div>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
