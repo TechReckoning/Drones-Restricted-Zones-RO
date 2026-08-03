@@ -17,13 +17,13 @@
 <body>
   <header class="legal-header">
     <span class="brand">🛰️ Drones Restricted Zones RO</span>
-    <a href="/">← Back to app</a>
+    <a href="/app">← Back to app</a>
   </header>
 
   <main class="legal">
     <div class="card">
       <h1>Privacy Policy</h1>
-      <p class="updated">Last updated: 14 July 2026</p>
+      <p class="updated">Last updated: 3 August 2026</p>
 
       <p>This Privacy Policy explains how Zorile Energie S.R.L.
         (societate cu răspundere limitată), the operator of the
@@ -47,7 +47,7 @@
             <tr><td>Account</td><td>Email address (used for passwordless "magic link" sign-in) and a unique account identifier.</td><td>You, at sign-up.</td></tr>
             <tr><td>Saved flying zones</td><td>The geometry (coordinates) you draw, computed area, a snapshot of overlapping restricted zones, the dataset version, and timestamps.</td><td>Created by you in the app.</td></tr>
             <tr><td>Profile &amp; equipment</td><td>Operator details (name, address/contact, operator code), remote pilots (name, phone, qualifications) and drones (registration, serial, manufacturer, model, class, category, MTOM) that you save to pre-fill official flight-approval requests.</td><td>Created by you in the app.</td></tr>
-            <tr><td>Billing &amp; invoicing</td><td>Your name, billing address and personal numeric code (CNP), plus subscription status, plan and billing period — collected at checkout to issue the invoices required by Romanian fiscal law. <strong>We do not receive or store your card details</strong> — these are handled directly by Stripe.</td><td>You, at checkout; Stripe.</td></tr>
+            <tr><td>Billing &amp; invoicing</td><td>Your name and billing address, plus subscription status, plan and billing period — collected at checkout to issue the invoices required by Romanian fiscal law. For an <strong>individual</strong>, your personal numeric code (CNP) is <strong>optional</strong> — provided only if you choose to add it to your invoice. For a <strong>business</strong>, we collect your company name and fiscal code (CIF/CUI). <strong>We do not receive or store your card details</strong> — these are handled directly by Stripe.</td><td>You, at checkout; Stripe.</td></tr>
             <tr><td>Technical</td><td>Server logs: IP address, request time, endpoint and basic device/browser metadata, for security and reliability.</td><td>Automatically.</td></tr>
           </tbody>
         </table>
@@ -63,8 +63,11 @@
       <h2>4. Processors and third parties</h2>
       <p>We share data only with service providers acting on our behalf under data-processing agreements:</p>
       <ul>
-        <li><strong>Supabase</strong> — authentication, database and hosting for your account and saved zones (hosted within the European Union).</li>
+        <li><strong>Supabase</strong> — authentication and database for your account, saved zones and equipment library (hosted within the European Union).</li>
+        <li><strong>Render</strong> — hosting of the application and its server logs.</li>
+        <li><strong>Resend</strong> — delivery of transactional emails (such as your passwordless "magic link"); it processes your email address to send them.</li>
         <li><strong>Stripe</strong> — payment processing and subscription management. Stripe is the processor of your payment data as an independent controller for its own compliance purposes; see stripe.com/privacy.</li>
+        <li><strong>Oblio</strong> — issuing the fiscal invoices required by Romanian law (including e-Factura). It receives the billing details above — your name and address, and, where provided, your CNP, or your company name and CIF/CUI — to generate the invoices.</li>
         <li><strong>OpenStreetMap</strong> — map tiles are loaded from OpenStreetMap servers, which necessarily receive your IP address to serve the imagery.</li>
       </ul>
 
@@ -77,10 +80,10 @@
       <p>Account and saved-zone data are kept for as long as your account is active.
         You may delete saved zones at any time, and you can delete your account together
         with all associated data yourself in the app (<strong>👤 Profile → Privacy</strong>).
-        Deleting your account also cancels any active subscription. Billing and invoicing
-        records already issued are retained by our payment processor for the period
-        required by Romanian fiscal law (10 years). Server logs are kept for a limited
-        period for security purposes.</p>
+        Deleting your account also cancels any active subscription. Invoices already
+        issued are retained by our invoicing provider (Oblio) for the period required by
+        Romanian fiscal law (10 years). Server logs are kept for a limited period for
+        security purposes.</p>
 
       <h2>7. Your rights</h2>
       <p>Under the GDPR you have the right to access, rectification, erasure,
