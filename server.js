@@ -543,29 +543,54 @@ async function getOrCreateCustomer(user) {
 app.post('/api/billing/checkout', requireUser, async (req, res) => {
   if (!billing.configured()) return res.status(503).json({ error: 'Billing is not configured on this server.' });
   const plan = req.body && req.body.plan === 'annual' ? 'annual' : 'monthly';
+  const accountType = req.body && req.body.accountType === 'business' ? 'business' : 'individual';
   const price = plan === 'annual' ? billing.PRICE_ANNUAL : billing.PRICE_MONTHLY;
   if (!price) return res.status(503).json({ error: 'Subscription prices are not configured.' });
   try {
     const customer = await getOrCreateCustomer(req.user);
     const base = publicBase();
+
+    // Invoicing fields differ by customer type (Stripe custom fields can't branch,
+    // so we build the right set here). Individuals: CNP is OPTIONAL. Businesses:
+    // company name + CIF are REQUIRED — Stripe enforces optional:false on its page.
+    const custom_fields = accountType === 'business'
+      ? [
+          {
+            key: 'company',
+            label: { type: 'custom', custom: 'Denumire firmă (Company name)' },
+            type: 'text',
+            text: { minimum_length: 2, maximum_length: 200 },
+            optional: false,
+          },
+          {
+            key: 'cif',
+            label: { type: 'custom', custom: 'CIF / CUI (cod fiscal)' },
+            type: 'text',
+            text: { minimum_length: 2, maximum_length: 20 },
+            optional: false,
+          },
+        ]
+      : [
+          {
+            key: 'cnp',
+            label: { type: 'custom', custom: 'CNP (optional — pentru factură)' },
+            type: 'numeric',
+            numeric: { minimum_length: 13, maximum_length: 13 },
+            optional: true,
+          },
+        ];
+
     const session = await billing.stripe.checkout.sessions.create({
       mode: 'subscription',
       customer,
       line_items: [{ price, quantity: 1 }],
       client_reference_id: req.user.id,
       subscription_data: { metadata: { user_id: req.user.id } },
+      metadata: { account_type: accountType },
       allow_promotion_codes: true,
       // Collect the details needed to issue legally-required Romanian invoices.
       billing_address_collection: 'required', // full name + billing address
-      custom_fields: [
-        {
-          key: 'cnp',
-          label: { type: 'custom', custom: 'CNP (Cod Numeric Personal)' },
-          type: 'numeric',
-          numeric: { minimum_length: 13, maximum_length: 13 },
-          optional: false,
-        },
-      ],
+      custom_fields,
       success_url: `${base}/app?checkout=success`,
       cancel_url: `${base}/app?checkout=cancel`,
     });
@@ -631,14 +656,29 @@ async function captureBillingDetails(session) {
   try {
     if (!session || !session.customer) return;
     const details = session.customer_details || {};
-    const cnpField = (session.custom_fields || []).find((f) => f.key === 'cnp');
-    const cnp = cnpField && cnpField.numeric ? cnpField.numeric.value : null;
-    const update = {};
-    if (details.name) update.name = details.name;
+    const fields = session.custom_fields || [];
+    const textVal = (key) => { const f = fields.find((x) => x.key === key); return f && f.text ? f.text.value : null; };
+    const numVal = (key) => { const f = fields.find((x) => x.key === key); return f && f.numeric ? f.numeric.value : null; };
+
+    const accountType = (session.metadata && session.metadata.account_type) === 'business' ? 'business' : 'individual';
+    const metadata = { account_type: accountType };
+    if (accountType === 'business') {
+      const company = textVal('company');
+      const cif = textVal('cif');
+      if (company) metadata.company_name = company;
+      if (cif) metadata.cif = cif;
+    } else {
+      const cnp = numVal('cnp'); // optional now — may be null
+      if (cnp) metadata.cnp = cnp;
+    }
+
+    const update = { metadata };
+    // For a business, show the company name on the Stripe customer/invoice.
+    if (accountType === 'business' && metadata.company_name) update.name = metadata.company_name;
+    else if (details.name) update.name = details.name;
     if (details.address) update.address = details.address;
     if (details.phone) update.phone = details.phone;
-    if (cnp) update.metadata = { cnp };
-    if (Object.keys(update).length) await billing.stripe.customers.update(session.customer, update);
+    await billing.stripe.customers.update(session.customer, update);
   } catch (err) {
     console.warn('[billing] could not capture billing details:', err.message);
   }

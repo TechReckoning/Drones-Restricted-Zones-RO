@@ -143,7 +143,18 @@
     <div class="modal">
       <button class="modal-close" data-close aria-label="Close">×</button>
       <h2>Subscribe to Pro</h2>
-      <p class="hint">Unlock flying-zone drawing, overlap analysis, KML export and saved history.</p>
+      <p class="hint">Unlock flying-zone drawing, overlap analysis, KML export, saved history, the equipment library and official request PDFs.</p>
+      <div class="acct-type" role="radiogroup" aria-label="Billing account type">
+        <label class="acct-opt">
+          <input type="radio" name="acct-type" value="individual" checked />
+          <span>Individual<small>persoană fizică</small></span>
+        </label>
+        <label class="acct-opt">
+          <input type="radio" name="acct-type" value="business" />
+          <span>Business<small>persoană juridică</small></span>
+        </label>
+      </div>
+      <p class="hint muted" id="acct-type-note">CNP is optional for individuals. For a business, company name &amp; CIF are required (for the invoice).</p>
       <div class="plan-grid">
         <button class="plan-card" data-plan="monthly">
           <span class="plan-price">50 RON</span><span class="plan-per">per month</span>

@@ -24,6 +24,11 @@ export const billing = {
     el('terms-agree')?.addEventListener('change', syncTermsGate);
     syncTermsGate();
 
+    // Reflect the chosen account type in the helper note.
+    document.querySelectorAll('input[name="acct-type"]').forEach((r) =>
+      r.addEventListener('change', syncAcctTypeNote)
+    );
+
     const params = new URLSearchParams(location.search);
     if (params.get('checkout') === 'success') {
       cleanUrl();
@@ -81,6 +86,16 @@ export const billing = {
   },
 };
 
+// Update the invoicing note when the account type changes.
+function syncAcctTypeNote() {
+  const note = el('acct-type-note');
+  if (!note) return;
+  const business = document.querySelector('input[name="acct-type"]:checked')?.value === 'business';
+  note.textContent = business
+    ? 'For a business, company name & CIF are required on the next step (for the invoice).'
+    : 'CNP is optional for individuals — you can add it for the invoice or skip it.';
+}
+
 // Enable the plan buttons only when the Terms/Privacy checkbox is ticked.
 function syncTermsGate() {
   const agreed = Boolean(el('terms-agree') && el('terms-agree').checked);
@@ -88,12 +103,14 @@ function syncTermsGate() {
 }
 
 async function startCheckout(plan) {
+  const picked = document.querySelector('input[name="acct-type"]:checked');
+  const accountType = picked && picked.value === 'business' ? 'business' : 'individual';
   el('subscribe-status').textContent = 'Redirecting to secure checkout…';
   try {
     const res = await fetch('/api/billing/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + auth.token },
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ plan, accountType }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.url) window.location.href = data.url;
