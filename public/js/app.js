@@ -205,6 +205,7 @@ const vpBridge = {
     L.geoJSON(plannerFG, { style: VP_STYLE.fg }).addTo(plannerGroup);
     try { map.fitBounds(L.geoJSON(grb).getBounds(), { padding: [40, 40] }); } catch { /* */ }
     return {
+      fg: plannerFG, cv, grb,
       overlaps: findZoneOverlaps(grb),
       areas: { fg: turf.area(plannerFG), cv: turf.area(cv), grb: turf.area(grb) },
     };

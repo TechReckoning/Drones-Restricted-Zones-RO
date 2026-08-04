@@ -83,6 +83,50 @@ ${overlapPlacemarks}
 </kml>`;
 }
 
+// Emit one or more placemarks for a Polygon or MultiPolygon geometry.
+function geometryPlacemarks(name, geometry, styleUrl, description) {
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates
+      .map((coords, i) => polygonPlacemark(`${name} ${i + 1}`, { type: 'Polygon', coordinates: coords }, styleUrl, description))
+      .join('\n');
+  }
+  return polygonPlacemark(name, geometry, styleUrl, description);
+}
+
+/**
+ * Build an LBA-compliant SORA operational-volume KML: Flight Geography (green),
+ * Contingency Volume (yellow) and Ground Risk Buffer (red), each in its own
+ * named folder — the format the authority expects attached to the application.
+ * @param {{fg:object, cv:object, grb:object, meta?:object}} v GeoJSON Features.
+ */
+export function buildVolumeKml({ fg, cv, grb, meta = {} }) {
+  const generatedAt = new Date().toISOString();
+  const name = meta.name || 'SORA operational volume — RO';
+  const description = `${meta.description ? meta.description + '\n' : ''}Generated ${generatedAt} · method: LBA / IR (EU) 2019/947`;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${escapeXml(name)}</name>
+    <description>${escapeXml(description)}</description>
+    <Style id="fg"><LineStyle><color>ff4aa316</color><width>2</width></LineStyle><PolyStyle><color>664aa316</color></PolyStyle></Style>
+    <Style id="cv"><LineStyle><color>ff0677d9</color><width>2</width></LineStyle><PolyStyle><color>660677d9</color></PolyStyle></Style>
+    <Style id="grb"><LineStyle><color>ff2626dc</color><width>2</width></LineStyle><PolyStyle><color>662626dc</color></PolyStyle></Style>
+    <Folder>
+      <name>Flight Geography</name>
+${geometryPlacemarks('Flight Geography', fg.geometry, '#fg')}
+    </Folder>
+    <Folder>
+      <name>Contingency Volume</name>
+${geometryPlacemarks('Contingency Volume', cv.geometry, '#cv')}
+    </Folder>
+    <Folder>
+      <name>Ground Risk Buffer</name>
+${geometryPlacemarks('Ground Risk Buffer', grb.geometry, '#grb')}
+    </Folder>
+  </Document>
+</kml>`;
+}
+
 export function downloadKml(kmlString, filename = 'flying-zone.kml') {
   const blob = new Blob([kmlString], { type: 'application/vnd.google-earth.kml+xml' });
   const url = URL.createObjectURL(blob);

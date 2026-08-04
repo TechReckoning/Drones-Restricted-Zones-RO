@@ -7,6 +7,7 @@
 // Map drawing (FG→CV→GRB buffers) + overlap analysis wire in next.
 
 import { computeVolume, r1 } from './volume-planner-calc.js';
+import { buildVolumeKml, downloadKml } from './kml.js';
 
 const MANEUVERS = {
   multirotor: {
@@ -149,6 +150,23 @@ export function initVolumePlanner({ container, billing, bridge }) {
     });
     const extra = (bridge && bridge.hasFG()) ? bridge.buildAndDraw(res.SCV, res.SGRB) : null;
     renderResults(q('#vp-results'), res, extra);
+    // Wire the export button (only present when volumes were drawn).
+    const exp = q('#vp-export');
+    if (exp && extra) {
+      exp.onclick = () => {
+        const i = res.inputs;
+        const kml = buildVolumeKml({
+          fg: extra.fg, cv: extra.cv, grb: extra.grb,
+          meta: {
+            name: 'SORA operational volume — RO',
+            description: `${i.aircraftType} · V₀=${i.V0} m/s · CD=${i.CD} m · H_FG=${i.HFG} m · `
+              + `S_CV=${r1(res.SCV)} m · H_CV=${r1(res.HCV)} m · S_GRB=${r1(res.SGRB)} m`,
+          },
+        });
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+        downloadKml(kml, `operational-volume-${stamp}.kml`);
+      };
+    }
   });
 }
 
@@ -169,6 +187,7 @@ function renderFootprint(extra) {
   return `<div class="vp-foot">
     <div class="vp-areas"><span>FG ${fmtArea(extra.areas.fg)}</span><span>CV ${fmtArea(extra.areas.cv)}</span><span>GRB ${fmtArea(extra.areas.grb)}</span></div>
     ${body}
+    <button type="button" id="vp-export" class="btn btn-primary btn-block">⬇ Export KML (FG · CV · GRB)</button>
   </div>`;
 }
 
