@@ -102,10 +102,10 @@ const basemaps = {
   }),
 };
 
-// Restore the user's last choice (persisted); default to Street.
+// Restore the user's last choice (persisted); default to Dark.
 let savedBase = null;
 try { savedBase = localStorage.getItem('dz-basemap'); } catch { /* private mode */ }
-const startBase = (savedBase && basemaps[savedBase]) ? savedBase : 'Street (OSM)';
+const startBase = (savedBase && basemaps[savedBase]) ? savedBase : 'Dark';
 basemaps[startBase].addTo(map);
 
 L.control.layers(basemaps, null, { position: 'topright' }).addTo(map);
