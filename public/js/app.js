@@ -4,6 +4,7 @@ import { history } from './history.js';
 import { billing } from './billing.js';
 import { library } from './library.js';
 import { request } from './request-form.js';
+import { initVolumePlanner } from './volume-planner.js';
 import './consent.js';
 
 /* ------------------------------------------------------------------ *
@@ -978,6 +979,21 @@ function currentFlightForSave() {
     suggestedName: `Flying zone (${overlaps.length} overlap${overlaps.length === 1 ? '' : 's'})`,
   };
 }
+
+// ---- Left-panel mode switch: Flying zone ↔ Volume Planner ----
+initVolumePlanner({ container: $('mode-volume-body'), billing });
+document.querySelectorAll('.mode-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach((b) => {
+      const on = b === btn;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', String(on));
+    });
+    $('mode-flight-body').classList.toggle('hidden', mode !== 'flight');
+    $('mode-volume-body').classList.toggle('hidden', mode !== 'volume');
+  });
+});
 
 // ---- go ----
 loadZones();

@@ -5,6 +5,7 @@ import { auth, openModal, toast } from './auth.js';
 
 const el = (id) => document.getElementById(id);
 let entitlement = null;
+const changeListeners = [];
 
 export const billing = {
   // When accounts aren't configured the app is fully open (no paywall).
@@ -15,6 +16,8 @@ export const billing = {
   get entitlement() {
     return entitlement;
   },
+  // Notified whenever entitlement changes (used e.g. to lock/unlock the Volume Planner).
+  onChange(fn) { changeListeners.push(fn); },
 
   init() {
     document.querySelectorAll('[data-plan]').forEach((b) =>
@@ -132,6 +135,8 @@ export async function openPortal() {
 }
 
 function renderBanner() {
+  // Fire entitlement-change listeners first, before any early return below.
+  changeListeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
   const banner = el('billing-banner');
   if (!banner) return;
   if (!auth.configured || !auth.user || !entitlement) {

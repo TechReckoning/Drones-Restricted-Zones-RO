@@ -41,10 +41,13 @@
     <!-- LEFT: flying-zone drawing / analysis -->
     <aside class="panel panel-left" id="panel-left">
       <div class="panel-header">
-        <h2>Flying zone</h2>
+        <div class="mode-switch" role="tablist" aria-label="Left panel mode">
+          <button class="mode-btn active" data-mode="flight" role="tab" aria-selected="true">✏️ Flying zone</button>
+          <button class="mode-btn" data-mode="volume" role="tab" aria-selected="false">📐 Volume Planner</button>
+        </div>
       </div>
 
-      <div class="panel-body">
+      <div class="panel-body" id="mode-flight-body">
         <div id="billing-banner" class="billing-banner hidden"></div>
         <div class="draw-controls">
           <button id="draw-btn" class="btn btn-primary">✏️ Polygon</button>
@@ -88,6 +91,9 @@
           </section>
         </div>
       </div>
+
+      <!-- Volume Planner (SORA operational volume) — populated by volume-planner.js -->
+      <div class="panel-body hidden" id="mode-volume-body"></div>
     </aside>
 
     <!-- CENTER: map -->
