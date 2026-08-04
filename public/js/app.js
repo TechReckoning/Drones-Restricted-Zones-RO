@@ -76,10 +76,40 @@ const els = {
 
 // ---- Map ----
 const map = L.map('map', { zoomControl: true }).setView([45.9432, 24.9668], 7);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-}).addTo(map);
+
+// Basemap gallery — the underlying map style. Zones/NOTAMs/drawings live in higher
+// panes, so they always stay on top when the basemap changes. All free / no API key.
+const basemaps = {
+  'Street (OSM)': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }),
+  'Dark': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20, subdomains: 'abcd',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  }),
+  'Light': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20, subdomains: 'abcd',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  }),
+  'Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+  }),
+  'Topographic': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17, subdomains: 'abc',
+    attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM · Style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+  }),
+};
+
+// Restore the user's last choice (persisted); default to Street.
+let savedBase = null;
+try { savedBase = localStorage.getItem('dz-basemap'); } catch { /* private mode */ }
+const startBase = (savedBase && basemaps[savedBase]) ? savedBase : 'Street (OSM)';
+basemaps[startBase].addTo(map);
+
+L.control.layers(basemaps, null, { position: 'topright' }).addTo(map);
+map.on('baselayerchange', (e) => { try { localStorage.setItem('dz-basemap', e.name); } catch { /* ignore */ } });
 
 const zonesGroup = L.geoJSON(null, {
   style: STYLE.base,

@@ -695,6 +695,16 @@ html, body {
 .leaflet-bar a:hover { background: var(--surface-3); }
 .leaflet-control-attribution { background: rgba(13, 21, 36, 0.82) !important; color: #8ba0bd !important; }
 .leaflet-control-attribution a { color: #93c5fd !important; }
+/* Basemap gallery (layers control) */
+.leaflet-control-layers {
+  background: #0d1524; color: var(--text);
+  border: 1px solid var(--panel-border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+.leaflet-control-layers-toggle { filter: invert(1) hue-rotate(180deg) brightness(1.1); }
+.leaflet-control-layers-expanded { padding: 8px 12px 8px 10px; }
+.leaflet-control-layers label { font-size: 13px; font-weight: 600; margin: 3px 0; }
+.leaflet-control-layers-selector { accent-color: var(--accent); margin-right: 6px; }
 .pt-row { border-left-color: var(--panel-border); }
 
 /* Focus rings → cyan */
