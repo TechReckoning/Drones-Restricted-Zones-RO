@@ -138,6 +138,81 @@ map.on('mousemove', (e) => coordControl.update(e.latlng));
 map.on('mouseout', () => coordControl.update(null));
 
 // =================================================================== //
+//  Volume Planner map bridge (draw FG → buffer to CV/GRB → overlap)
+// =================================================================== //
+const plannerGroup = L.layerGroup().addTo(map);
+let plannerFG = null;          // Feature<Polygon> — the drawn flight geography
+let plannerDrawing = false;    // true while Geoman is drawing for the planner
+// LBA colours: Flight Geography green · Contingency Volume yellow · GRB red.
+const VP_STYLE = {
+  fg:  { color: '#16a34a', weight: 2, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.25, dashArray: null },
+  cv:  { color: '#d97706', weight: 2, opacity: 1, fillColor: '#f59e0b', fillOpacity: 0.18, dashArray: null },
+  grb: { color: '#dc2626', weight: 2, opacity: 1, fillColor: '#ef4444', fillOpacity: 0.12, dashArray: null },
+};
+
+// Which live restrictions intersect a given footprint (reuses the zone index).
+function findZoneOverlaps(feature) {
+  const bb = turf.bbox(feature);
+  const out = [];
+  zones.forEach((r, id) => {
+    if (!bboxOverlap(bb, r.bbox)) return;
+    try { if (!turf.booleanIntersects(feature, r.feature)) return; } catch { return; }
+    let overlapArea = null;
+    try {
+      const inter = turf.intersect(turf.featureCollection([feature, r.feature]));
+      if (inter) overlapArea = turf.area(inter);
+    } catch { /* degenerate geometry */ }
+    out.push({ id, feature: r.feature, overlapArea });
+  });
+  return out;
+}
+
+const vpBridge = {
+  hasFG: () => Boolean(plannerFG),
+  // Enable Geoman to draw the flight geography; onDone(fgFeature) when finished.
+  drawFG(shape, onDone) {
+    plannerDrawing = true;
+    map.pm.disableDraw();
+    if (shape === 'circle') map.pm.enableDraw('Circle', { snappable: true });
+    else map.pm.enableDraw('Polygon', { snappable: true, finishOn: 'dblclick' });
+    map.once('pm:create', (e) => {
+      map.pm.disableDraw();
+      let fg;
+      if (e.shape === 'Circle') {
+        const c = e.layer.getLatLng();
+        fg = turf.circle([c.lng, c.lat], e.layer.getRadius() / 1000, { steps: 64, units: 'kilometers' });
+      } else {
+        fg = e.layer.toGeoJSON();
+      }
+      map.removeLayer(e.layer);
+      plannerFG = fg;
+      plannerGroup.clearLayers();
+      L.geoJSON(fg, { style: VP_STYLE.fg }).addTo(plannerGroup);
+      try { map.fitBounds(L.geoJSON(fg).getBounds(), { padding: [60, 60] }); } catch { /* */ }
+      plannerDrawing = false;
+      if (onDone) onDone(fg);
+    });
+  },
+  // Buffer the stored FG outward by S_CV then S_GRB, draw all three, return
+  // the overlap list + ground-projection areas.
+  buildAndDraw(SCV, SGRB) {
+    if (!plannerFG) return null;
+    const cv = turf.buffer(plannerFG, SCV / 1000, { units: 'kilometers', steps: 24 });
+    const grb = turf.buffer(cv, SGRB / 1000, { units: 'kilometers', steps: 24 });
+    plannerGroup.clearLayers();
+    L.geoJSON(grb, { style: VP_STYLE.grb }).addTo(plannerGroup);
+    L.geoJSON(cv, { style: VP_STYLE.cv }).addTo(plannerGroup);
+    L.geoJSON(plannerFG, { style: VP_STYLE.fg }).addTo(plannerGroup);
+    try { map.fitBounds(L.geoJSON(grb).getBounds(), { padding: [40, 40] }); } catch { /* */ }
+    return {
+      overlaps: findZoneOverlaps(grb),
+      areas: { fg: turf.area(plannerFG), cv: turf.area(cv), grb: turf.area(grb) },
+    };
+  },
+  clear() { plannerFG = null; plannerGroup.clearLayers(); },
+};
+
+// =================================================================== //
 //  Data loading
 // =================================================================== //
 async function loadZones({ refresh = false } = {}) {
@@ -573,6 +648,7 @@ els.drawCircleBtn.addEventListener('click', () => {
 map.pm.setGlobalOptions({ pathOptions: STYLE.flight });
 
 map.on('pm:create', (e) => {
+  if (plannerDrawing) return; // the Volume Planner handles its own draw
   if (e.shape === 'Circle') activateFlight(e.layer, 'circle');
   else if (e.shape === 'Polygon') activateFlight(e.layer, 'polygon');
 });
@@ -981,7 +1057,7 @@ function currentFlightForSave() {
 }
 
 // ---- Left-panel mode switch: Flying zone ↔ Volume Planner ----
-initVolumePlanner({ container: $('mode-volume-body'), billing });
+initVolumePlanner({ container: $('mode-volume-body'), billing, bridge: vpBridge });
 document.querySelectorAll('.mode-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;

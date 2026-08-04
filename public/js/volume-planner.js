@@ -27,6 +27,14 @@ const FORM_HTML = `
     <p class="hint">Compute the SORA operational volume (Flight Geography → Contingency
       Volume → Ground Risk Buffer) per the LBA/EU 2019/947 method.</p>
 
+    <div class="vp-group">Flight geography</div>
+    <div class="vp-shape">
+      <button type="button" id="vp-draw-poly" class="btn btn-ghost btn-mini">✏️ Polygon</button>
+      <button type="button" id="vp-draw-circle" class="btn btn-ghost btn-mini">⭕ Circle</button>
+      <button type="button" id="vp-clear" class="btn btn-ghost btn-mini">Clear</button>
+    </div>
+    <p class="hint muted" id="vp-shape-status">No flight geography drawn yet.</p>
+
     <div class="vp-group">Aircraft & flight</div>
     <div class="vp-seg" role="radiogroup" aria-label="Aircraft type">
       <label><input type="radio" name="vp-aircraft" value="multirotor" checked /> <span>Multirotor</span></label>
@@ -70,11 +78,12 @@ const FORM_HTML = `
   </div>
 `;
 
-export function initVolumePlanner({ container, billing }) {
+export function initVolumePlanner({ container, billing, bridge }) {
   container.innerHTML = FORM_HTML;
   const q = (sel) => container.querySelector(sel);
   const root = q('.vp');
   const num = (id, dflt) => { const v = parseFloat(q('#' + id)?.value); return isFinite(v) ? v : dflt; };
+  const setShapeStatus = (has) => { q('#vp-shape-status').textContent = has ? '✓ Flight geography drawn — press Compute.' : 'No flight geography drawn yet.'; };
 
   // ---- Gate: visible but inert until entitled ----
   function updateGate() { root.classList.toggle('vp-locked', !billing.access); }
@@ -114,7 +123,17 @@ export function initVolumePlanner({ container, billing }) {
   ['#vp-hcm', '#vp-vcm', '#vp-grb'].forEach((s) => q(s).addEventListener('change', syncConditional));
   syncAircraft();
 
-  // ---- Compute → breakdown ----
+  // ---- Draw the flight geography (via the map bridge) ----
+  const startDraw = (shape) => {
+    if (!billing.access || !bridge) return;
+    q('#vp-shape-status').textContent = 'Click on the map to draw the flight geography…';
+    bridge.drawFG(shape, () => setShapeStatus(true));
+  };
+  q('#vp-draw-poly').addEventListener('click', () => startDraw('polygon'));
+  q('#vp-draw-circle').addEventListener('click', () => startDraw('circle'));
+  q('#vp-clear').addEventListener('click', () => { bridge && bridge.clear(); setShapeStatus(false); q('#vp-results').innerHTML = ''; });
+
+  // ---- Compute → breakdown (+ draw volumes & overlap when an FG is drawn) ----
   q('#vp-compute').addEventListener('click', () => {
     if (!billing.access) return; // gate already blocks, belt-and-braces
     const res = computeVolume({
@@ -128,11 +147,32 @@ export function initVolumePlanner({ container, billing }) {
       SGPS: num('vp-sgps', 3), SPos: num('vp-spos', 3), SK: num('vp-sk', 1),
       reactionTime: num('vp-treact', 1), groundVisibility: num('vp-gv', 5000),
     });
-    renderResults(q('#vp-results'), res);
+    const extra = (bridge && bridge.hasFG()) ? bridge.buildAndDraw(res.SCV, res.SGRB) : null;
+    renderResults(q('#vp-results'), res, extra);
   });
 }
 
-function renderResults(box, res) {
+const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmtArea = (m2) => (m2 < 1e6 ? `${Math.round(m2).toLocaleString()} m²` : `${(m2 / 1e6).toFixed(2)} km²`);
+
+function renderFootprint(extra) {
+  if (!extra) {
+    return `<p class="hint">Draw a flight geography (above) then <b>Compute</b> to draw the
+      volumes on the map and check them against live Romanian restrictions.</p>`;
+  }
+  const ov = extra.overlaps || [];
+  const body = ov.length
+    ? `<div class="vp-warn">⚠ ${ov.length} restriction${ov.length > 1 ? 's' : ''} intersect the operational footprint (GRB):</div>
+       <ul class="vp-ovl">${ov.slice(0, 25).map((o) => `<li>${esc(o.feature.properties.zone_id || '—')} <span>${esc(o.feature.properties.status || o.feature.properties.category || '')}</span></li>`).join('')}</ul>
+       ${ov.length > 25 ? `<div class="hint muted">…and ${ov.length - 25} more</div>` : ''}`
+    : `<div class="vp-ok">✓ No Romanian restrictions intersect the operational footprint.</div>`;
+  return `<div class="vp-foot">
+    <div class="vp-areas"><span>FG ${fmtArea(extra.areas.fg)}</span><span>CV ${fmtArea(extra.areas.cv)}</span><span>GRB ${fmtArea(extra.areas.grb)}</span></div>
+    ${body}
+  </div>`;
+}
+
+function renderResults(box, res, extra) {
   const m = (x) => `${r1(x)} m`;
   const row = (label, value, sub) => `<tr><td>${label}${sub ? ` <span class="vp-sub">${sub}</span>` : ''}</td><td>${value}</td></tr>`;
   box.innerHTML = `
@@ -156,6 +196,6 @@ function renderResults(box, res) {
       ${row('Adjacent height', m(res.HAV), 'H_AV')}
       ${row('VLOS limit', m(res.vlosLimit), `min(ALOS ${r1(res.ALOS)}, DLOS ${r1(res.DLOS)})`)}
     </table>
-    <p class="hint">Next: draw a flight geography and these buffers will be drawn on the map (green FG · yellow CV · red GRB) and checked against Romanian restrictions.</p>
+    ${renderFootprint(extra)}
   `;
 }
