@@ -8,6 +8,7 @@
 
 import { computeVolume, r1 } from './volume-planner-calc.js';
 import { buildVolumeKml, downloadKml } from './kml.js';
+import { libraryData } from './library.js';
 
 const MANEUVERS = {
   multirotor: {
@@ -41,6 +42,7 @@ const FORM_HTML = `
     </div>
 
     <div class="vp-group">Aircraft & flight</div>
+    <label class="vp-f vp-load"><span>Load from my drones</span><select id="vp-drone"><option value="">— manual entry —</option></select></label>
     <div class="vp-seg" role="radiogroup" aria-label="Aircraft type">
       <label><input type="radio" name="vp-aircraft" value="multirotor" checked /> <span>Multirotor</span></label>
       <label><input type="radio" name="vp-aircraft" value="fixedwing" /> <span>Fixed-wing</span></label>
@@ -127,6 +129,28 @@ export function initVolumePlanner({ container, billing, bridge }) {
   container.querySelectorAll('input[name="vp-aircraft"]').forEach((r) => r.addEventListener('change', syncAircraft));
   ['#vp-hcm', '#vp-vcm', '#vp-grb'].forEach((s) => q(s).addEventListener('change', syncConditional));
   syncAircraft();
+
+  // ---- Auto-fill from a saved drone (library) ----
+  const populateDrones = () => {
+    const sel = q('#vp-drone'); if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = ['<option value="">— manual entry —</option>']
+      .concat((libraryData.drones || []).map((d) => `<option value="${d.id}">${esc([d.manufacturer, d.model].filter(Boolean).join(' ') || d.registration || 'Drone')}</option>`))
+      .join('');
+    sel.value = cur;
+  };
+  const applyDrone = (d) => {
+    if (!d) return;
+    if (d.aircraft_type === 'multirotor' || d.aircraft_type === 'fixedwing') {
+      const radio = q(`input[name="vp-aircraft"][value="${d.aircraft_type}"]`);
+      if (radio) { radio.checked = true; syncAircraft(); }
+    }
+    const set = (id, v) => { if (v != null && v !== '') q('#' + id).value = v; };
+    set('vp-v0', d.v0_ms); set('vp-cd', d.cd_m); set('vp-wind', d.v_wind_ms); set('vp-glide', d.glide_ratio);
+  };
+  q('#vp-drone').addEventListener('focus', populateDrones);
+  q('#vp-drone').addEventListener('change', () => applyDrone((libraryData.drones || []).find((x) => x.id === q('#vp-drone').value)));
+  populateDrones();
 
   // ---- Draw the flight geography (via the map bridge) ----
   const startDraw = (shape) => {

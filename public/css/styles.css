@@ -469,6 +469,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .vp-sub { color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 10px; }
 .vp-shape { display: flex; gap: 6px; }
 .vp-shape .btn { flex: 1; }
+.vp-load { margin-bottom: 8px; }
 .vp-foot { margin-top: 12px; }
 .vp-areas { display: flex; gap: 6px; margin-bottom: 8px; }
 .vp-areas span { flex: 1; text-align: center; font-size: 11px; font-weight: 700; background: var(--surface-2); border: 1px solid var(--panel-border); border-radius: 6px; padding: 5px 4px; color: #c6d3e8; }

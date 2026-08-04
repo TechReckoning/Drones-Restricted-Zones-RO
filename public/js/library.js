@@ -30,6 +30,12 @@ const DRONE_FIELDS = [
   { k: 'category', label: 'Category', type: 'select', options: ['', 'A1', 'A2', 'A3'] },
   { k: 'operator_code', label: 'Operator code' },
   { k: 'mtom_kg', label: 'MTOM (kg)', type: 'number' },
+  // Volume Planner performance data (auto-fills the SORA operational-volume calc).
+  { k: 'aircraft_type', label: 'Type (Volume Planner)', type: 'select', options: ['', 'multirotor', 'fixedwing'] },
+  { k: 'v0_ms', label: 'Max speed V₀ (m/s)', type: 'number' },
+  { k: 'cd_m', label: 'Char. dimension CD (m)', type: 'number' },
+  { k: 'v_wind_ms', label: 'Max wind (m/s)', type: 'number' },
+  { k: 'glide_ratio', label: 'Glide ratio (fixed-wing)', type: 'number' },
 ];
 
 // In-memory copies so the request wizard can read them without refetching.
