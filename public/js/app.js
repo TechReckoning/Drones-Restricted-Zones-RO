@@ -119,7 +119,7 @@ const zonesGroup = L.geoJSON(null, {
 
 // Clicking empty map (not on any zone layer) runs the same point query, which
 // clears the selection when nothing is there. Guarded while drawing/editing.
-map.on('click', (e) => selectAtPoint(e.latlng));
+map.on('click', (e) => { if (plannerPlacing) return; selectAtPoint(e.latlng); });
 
 // Live coordinate readout — always shows the cursor's lat/lng as it moves.
 const coordControl = L.control({ position: 'bottomleft' });
@@ -141,8 +141,11 @@ map.on('mouseout', () => coordControl.update(null));
 //  Volume Planner map bridge (draw FG → buffer to CV/GRB → overlap)
 // =================================================================== //
 const plannerGroup = L.layerGroup().addTo(map);
+const plannerMarkers = L.layerGroup().addTo(map); // pilot / TO-LD (survive recompute)
 let plannerFG = null;          // Feature<Polygon> — the drawn flight geography
 let plannerDrawing = false;    // true while Geoman is drawing for the planner
+let plannerPlacing = false;    // true while placing a pilot / TO-LD marker
+let pilotLL = null, toldLL = null;
 // LBA colours: Flight Geography green · Contingency Volume yellow · GRB red.
 const VP_STYLE = {
   fg:  { color: '#16a34a', weight: 2, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.25, dashArray: null },
@@ -167,8 +170,29 @@ function findZoneOverlaps(feature) {
   return out;
 }
 
+function redrawPlannerMarkers() {
+  plannerMarkers.clearLayers();
+  const mk = (ll, label) => L.circleMarker(ll, { radius: 6, color: '#0369a1', weight: 2, fillColor: '#38bdf8', fillOpacity: 1 })
+    .bindTooltip(label, { permanent: true, direction: 'top', className: 'vp-mk', offset: [0, -6] })
+    .addTo(plannerMarkers);
+  if (pilotLL) mk(pilotLL, 'Pilot');
+  if (toldLL) mk(toldLL, 'TO/LD');
+}
+
 const vpBridge = {
   hasFG: () => Boolean(plannerFG),
+  // Place the pilot or take-off/landing marker with the next map click.
+  placeMarker(kind, onDone) {
+    plannerPlacing = true;
+    map.getContainer().style.cursor = 'crosshair';
+    map.once('click', (e) => {
+      plannerPlacing = false;
+      map.getContainer().style.cursor = '';
+      if (kind === 'told') toldLL = e.latlng; else pilotLL = e.latlng;
+      redrawPlannerMarkers();
+      if (onDone) onDone();
+    });
+  },
   // Enable Geoman to draw the flight geography; onDone(fgFeature) when finished.
   drawFG(shape, onDone) {
     plannerDrawing = true;
@@ -204,13 +228,27 @@ const vpBridge = {
     L.geoJSON(cv, { style: VP_STYLE.cv }).addTo(plannerGroup);
     L.geoJSON(plannerFG, { style: VP_STYLE.fg }).addTo(plannerGroup);
     try { map.fitBounds(L.geoJSON(grb).getBounds(), { padding: [40, 40] }); } catch { /* */ }
+    // VLOS: largest distance from the pilot to the CV outer boundary.
+    let pilotToCV = null;
+    if (pilotLL) {
+      const p = turf.point([pilotLL.lng, pilotLL.lat]);
+      let maxD = 0;
+      turf.coordAll(cv).forEach((c) => {
+        const d = turf.distance(p, turf.point(c), { units: 'kilometers' }) * 1000;
+        if (d > maxD) maxD = d;
+      });
+      pilotToCV = maxD;
+    }
     return {
-      fg: plannerFG, cv, grb,
+      fg: plannerFG, cv, grb, pilot: pilotLL, told: toldLL, pilotToCV,
       overlaps: findZoneOverlaps(grb),
       areas: { fg: turf.area(plannerFG), cv: turf.area(cv), grb: turf.area(grb) },
     };
   },
-  clear() { plannerFG = null; plannerGroup.clearLayers(); },
+  clear() {
+    plannerFG = null; pilotLL = null; toldLL = null;
+    plannerGroup.clearLayers(); plannerMarkers.clearLayers();
+  },
 };
 
 // =================================================================== //

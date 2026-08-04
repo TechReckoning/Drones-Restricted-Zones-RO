@@ -99,7 +99,11 @@ function geometryPlacemarks(name, geometry, styleUrl, description) {
  * named folder — the format the authority expects attached to the application.
  * @param {{fg:object, cv:object, grb:object, meta?:object}} v GeoJSON Features.
  */
-export function buildVolumeKml({ fg, cv, grb, meta = {} }) {
+function pointPlacemark(name, ll) {
+  return `    <Placemark><name>${escapeXml(name)}</name><Point><coordinates>${ll.lng},${ll.lat},0</coordinates></Point></Placemark>`;
+}
+
+export function buildVolumeKml({ fg, cv, grb, pilot, told, meta = {} }) {
   const generatedAt = new Date().toISOString();
   const name = meta.name || 'SORA operational volume — RO';
   const description = `${meta.description ? meta.description + '\n' : ''}Generated ${generatedAt} · method: LBA / IR (EU) 2019/947`;
@@ -122,7 +126,15 @@ ${geometryPlacemarks('Contingency Volume', cv.geometry, '#cv')}
     <Folder>
       <name>Ground Risk Buffer</name>
 ${geometryPlacemarks('Ground Risk Buffer', grb.geometry, '#grb')}
-    </Folder>
+    </Folder>${pilot ? `
+    <Folder>
+      <name>Pilot</name>
+${pointPlacemark('Pilot', pilot)}
+    </Folder>` : ''}${told ? `
+    <Folder>
+      <name>TO/LD</name>
+${pointPlacemark('TO/LD', told)}
+    </Folder>` : ''}
   </Document>
 </kml>`;
 }

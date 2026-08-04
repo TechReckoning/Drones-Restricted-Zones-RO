@@ -35,6 +35,10 @@ const FORM_HTML = `
       <button type="button" id="vp-clear" class="btn btn-ghost btn-mini">Clear</button>
     </div>
     <p class="hint muted" id="vp-shape-status">No flight geography drawn yet.</p>
+    <div class="vp-shape">
+      <button type="button" id="vp-set-pilot" class="btn btn-ghost btn-mini">📍 Pilot</button>
+      <button type="button" id="vp-set-told" class="btn btn-ghost btn-mini">🛫 TO/LD</button>
+    </div>
 
     <div class="vp-group">Aircraft & flight</div>
     <div class="vp-seg" role="radiogroup" aria-label="Aircraft type">
@@ -133,6 +137,13 @@ export function initVolumePlanner({ container, billing, bridge }) {
   q('#vp-draw-poly').addEventListener('click', () => startDraw('polygon'));
   q('#vp-draw-circle').addEventListener('click', () => startDraw('circle'));
   q('#vp-clear').addEventListener('click', () => { bridge && bridge.clear(); setShapeStatus(false); q('#vp-results').innerHTML = ''; });
+  const placeMk = (kind, msg) => {
+    if (!billing.access || !bridge) return;
+    q('#vp-shape-status').textContent = msg;
+    bridge.placeMarker(kind, () => setShapeStatus(bridge.hasFG()));
+  };
+  q('#vp-set-pilot').addEventListener('click', () => placeMk('pilot', 'Click the map to place the pilot position…'));
+  q('#vp-set-told').addEventListener('click', () => placeMk('told', 'Click the map to place take-off / landing…'));
 
   // ---- Compute → breakdown (+ draw volumes & overlap when an FG is drawn) ----
   q('#vp-compute').addEventListener('click', () => {
@@ -156,7 +167,7 @@ export function initVolumePlanner({ container, billing, bridge }) {
       exp.onclick = () => {
         const i = res.inputs;
         const kml = buildVolumeKml({
-          fg: extra.fg, cv: extra.cv, grb: extra.grb,
+          fg: extra.fg, cv: extra.cv, grb: extra.grb, pilot: extra.pilot, told: extra.told,
           meta: {
             name: 'SORA operational volume — RO',
             description: `${i.aircraftType} · V₀=${i.V0} m/s · CD=${i.CD} m · H_FG=${i.HFG} m · `
@@ -204,10 +215,18 @@ function schematicHtml(res) {
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fmtArea = (m2) => (m2 < 1e6 ? `${Math.round(m2).toLocaleString()} m²` : `${(m2 / 1e6).toFixed(2)} km²`);
 
-function renderFootprint(extra) {
+function renderFootprint(extra, res) {
   if (!extra) {
     return `<p class="hint">Draw a flight geography (above) then <b>Compute</b> to draw the
       volumes on the map and check them against live Romanian restrictions.</p>`;
+  }
+  let vlos = '';
+  if (res && extra.pilotToCV != null) {
+    const bvlos = extra.pilotToCV > res.vlosLimit;
+    vlos = `<div class="vp-vlos ${bvlos ? 'vp-bvlos' : 'vp-isvlos'}">${bvlos ? '⚠ BVLOS required' : '✓ VLOS'}
+      — pilot → CV edge ${r1(extra.pilotToCV)} m vs VLOS limit ${r1(res.vlosLimit)} m</div>`;
+  } else if (res) {
+    vlos = `<div class="hint muted">Place a 📍 Pilot marker to check VLOS/BVLOS (limit ${r1(res.vlosLimit)} m).</div>`;
   }
   const ov = extra.overlaps || [];
   const body = ov.length
@@ -217,8 +236,9 @@ function renderFootprint(extra) {
     : `<div class="vp-ok">✓ No Romanian restrictions intersect the operational footprint.</div>`;
   return `<div class="vp-foot">
     <div class="vp-areas"><span>FG ${fmtArea(extra.areas.fg)}</span><span>CV ${fmtArea(extra.areas.cv)}</span><span>GRB ${fmtArea(extra.areas.grb)}</span></div>
+    ${vlos}
     ${body}
-    <button type="button" id="vp-export" class="btn btn-primary btn-block">⬇ Export KML (FG · CV · GRB)</button>
+    <button type="button" id="vp-export" class="btn btn-primary btn-block">⬇ Export KML (FG · CV · GRB${extra.pilot ? ' · Pilot' : ''})</button>
   </div>`;
 }
 
@@ -247,6 +267,6 @@ function renderResults(box, res, extra) {
       ${row('Adjacent height', m(res.HAV), 'H_AV')}
       ${row('VLOS limit', m(res.vlosLimit), `min(ALOS ${r1(res.ALOS)}, DLOS ${r1(res.DLOS)})`)}
     </table>
-    ${renderFootprint(extra)}
+    ${renderFootprint(extra, res)}
   `;
 }
