@@ -170,6 +170,37 @@ export function initVolumePlanner({ container, billing, bridge }) {
   });
 }
 
+// Schematic (not-to-scale) side + top views, LBA-style, with the real dimensions
+// labelled. Structure shows FG (green) ⊂ CV (yellow) ⊂ GRB (red).
+function schematicHtml(res) {
+  const G = 112;                 // ground line (side view)
+  const hcvPx = 84;
+  const hfgPx = Math.max(12, Math.min(hcvPx - 6, hcvPx * (res.inputs.HFG / res.HCV)));
+  const topCV = G - hcvPx, topFG = G - hfgPx, ramp = 54;
+  const side = `<svg viewBox="0 0 260 140" class="vp-svg" preserveAspectRatio="xMidYMid meet">
+    <line x1="12" y1="${G}" x2="248" y2="${G}" class="vp-ground"/>
+    <path d="M172 ${topCV} L${172 + ramp} ${G} L172 ${G} Z" fill="rgba(239,68,68,.18)" stroke="#dc2626"/>
+    <path d="M88 ${topCV} L${88 - ramp} ${G} L88 ${G} Z" fill="rgba(239,68,68,.18)" stroke="#dc2626"/>
+    <rect x="88" y="${topCV}" width="84" height="${hcvPx}" fill="rgba(245,158,11,.16)" stroke="#d97706"/>
+    <rect x="106" y="${topFG}" width="48" height="${hfgPx}" fill="rgba(34,197,94,.24)" stroke="#16a34a"/>
+    <text x="130" y="${topFG + hfgPx / 2 + 3}" class="vp-svg-t" text-anchor="middle">FG</text>
+    <text x="130" y="${topCV - 4}" class="vp-svg-d" text-anchor="middle">H_CV ${r1(res.HCV)} m · H_FG ${r1(res.inputs.HFG)} m</text>
+    <text x="${172 + ramp / 2}" y="${G + 11}" class="vp-svg-d" text-anchor="middle">S_GRB ${r1(res.SGRB)} m</text>
+  </svg>`;
+  const top = `<svg viewBox="0 0 260 140" class="vp-svg" preserveAspectRatio="xMidYMid meet">
+    <rect x="14" y="12" width="232" height="116" fill="rgba(239,68,68,.14)" stroke="#dc2626"/>
+    <rect x="44" y="34" width="172" height="72" fill="rgba(245,158,11,.16)" stroke="#d97706"/>
+    <rect x="98" y="58" width="64" height="24" fill="rgba(34,197,94,.24)" stroke="#16a34a"/>
+    <text x="130" y="73" class="vp-svg-t" text-anchor="middle">FG</text>
+    <text x="130" y="26" class="vp-svg-d" text-anchor="middle">S_GRB ${r1(res.SGRB)} m</text>
+    <text x="130" y="49" class="vp-svg-d" text-anchor="middle">S_CV ${r1(res.SCV)} m</text>
+  </svg>`;
+  return `<div class="vp-schem">
+    <figure><figcaption>Side view</figcaption>${side}</figure>
+    <figure><figcaption>Top view</figcaption>${top}</figure>
+  </div>`;
+}
+
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const fmtArea = (m2) => (m2 < 1e6 ? `${Math.round(m2).toLocaleString()} m²` : `${(m2 / 1e6).toFixed(2)} km²`);
 
@@ -200,6 +231,7 @@ function renderResults(box, res, extra) {
       <div class="vp-hcard"><small>Contingency · height</small><b>${m(res.HCV)}</b><span>H_CV</span></div>
       <div class="vp-hcard vp-hcard-red"><small>Ground risk buffer</small><b>${m(res.SGRB)}</b><span>S_GRB</span></div>
     </div>
+    ${schematicHtml(res)}
     <table class="vp-table">
       <tr class="vp-th"><td colspan="2">Lateral contingency (S_CV)</td></tr>
       ${row('GPS / position / map', m(res.inputs.SGPS + res.inputs.SPos + res.inputs.SK), 'S_GPS+S_Pos+S_K')}
