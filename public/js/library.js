@@ -29,7 +29,11 @@ const DRONE_FIELDS = [
   // C0–C4 are Open-category class marks; C5/C6 are Specific-category marks (usable
   // by the Volume Planner, not by the Open-category Anexa forms). PRV250/PRV25 are
   // privately built UAS (<250 g / <25 kg) that carry no class mark.
-  { k: 'operating_class', label: 'Operating class', type: 'select', options: ['', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'PRV250', 'PRV25'] },
+  { k: 'operating_class', label: 'Operating class', type: 'select', optgroups: [
+    { label: 'Open category', options: ['C0', 'C1', 'C2', 'C3', 'C4'] },
+    { label: 'Specific category', options: ['C5', 'C6'] },
+    { label: 'Privately built', options: ['PRV250', 'PRV25'] },
+  ] },
   { k: 'category', label: 'Category', type: 'select', options: ['', 'A1', 'A2', 'A3'] },
   { k: 'operator_code', label: 'Operator code' },
   { k: 'mtom_kg', label: 'MTOM (kg)', type: 'number' },
@@ -231,8 +235,12 @@ function fieldHtml(f, value, prefix) {
   const id = `f_${prefix}_${f.k}`;
   if (f.type === 'textarea') return `<label class="lib-field"><span>${f.label}</span><textarea id="${id}" rows="2">${escapeHtml(v)}</textarea></label>`;
   if (f.type === 'select') {
-    const opts = f.options.map((o) => `<option value="${o}"${String(v) === o ? ' selected' : ''}>${o || '—'}</option>`).join('');
-    return `<label class="lib-field"><span>${f.label}</span><select id="${id}">${opts}</select></label>`;
+    const optTag = (o) => `<option value="${o}"${String(v) === o ? ' selected' : ''}>${o || '—'}</option>`;
+    const body = f.optgroups
+      ? `<option value=""${!v ? ' selected' : ''}>—</option>` + f.optgroups.map((g) =>
+          `<optgroup label="${g.label}">${g.options.map(optTag).join('')}</optgroup>`).join('')
+      : f.options.map(optTag).join('');
+    return `<label class="lib-field"><span>${f.label}</span><select id="${id}">${body}</select></label>`;
   }
   return `<label class="lib-field"><span>${f.label}</span><input id="${id}" type="${f.type || 'text'}" value="${escapeHtml(v)}" /></label>`;
 }
