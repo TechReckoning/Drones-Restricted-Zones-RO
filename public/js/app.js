@@ -141,16 +141,19 @@ map.on('mouseout', () => coordControl.update(null));
 //  Volume Planner map bridge (draw FG → buffer to CV/GRB → overlap)
 // =================================================================== //
 const plannerGroup = L.layerGroup().addTo(map);
-const plannerMarkers = L.layerGroup().addTo(map); // pilot / TO-LD (survive recompute)
+const plannerMarkers = L.layerGroup().addTo(map);  // pilot / TO-LD (survive recompute)
+const plannerAdjacent = L.layerGroup().addTo(map); // optional adjacent-volume outline
 let plannerFG = null;          // Feature<Polygon> — the drawn flight geography
 let plannerDrawing = false;    // true while Geoman is drawing for the planner
 let plannerPlacing = false;    // true while placing a pilot / TO-LD marker
 let pilotLL = null, toldLL = null;
+let lastCV = null;             // last computed CV (for the adjacent-volume toggle)
 // LBA colours: Flight Geography green · Contingency Volume yellow · GRB red.
 const VP_STYLE = {
   fg:  { color: '#16a34a', weight: 2, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.25, dashArray: null },
   cv:  { color: '#d97706', weight: 2, opacity: 1, fillColor: '#f59e0b', fillOpacity: 0.18, dashArray: null },
   grb: { color: '#dc2626', weight: 2, opacity: 1, fillColor: '#ef4444', fillOpacity: 0.12, dashArray: null },
+  adj: { color: '#38bdf8', weight: 1.5, opacity: 0.9, fillColor: '#38bdf8', fillOpacity: 0.05, dashArray: '6,5' },
 };
 
 // Which live restrictions intersect a given footprint (reuses the zone index).
@@ -194,21 +197,26 @@ const vpBridge = {
     });
   },
   // Enable Geoman to draw the shape (FG for v1, controlled ground area for v2).
-  drawFG(shape, variant, onDone) {
+  // shape: 'polygon' | 'circle' | 'corridor' (a line buffered by corridorWidthM/2).
+  drawFG(shape, variant, onDone, corridorWidthM) {
     plannerDrawing = true;
     map.pm.disableDraw();
-    if (shape === 'circle') map.pm.enableDraw('Circle', { snappable: true });
+    if (shape === 'corridor') map.pm.enableDraw('Line', { snappable: true, finishOn: 'dblclick' });
+    else if (shape === 'circle') map.pm.enableDraw('Circle', { snappable: true });
     else map.pm.enableDraw('Polygon', { snappable: true, finishOn: 'dblclick' });
     map.once('pm:create', (e) => {
       map.pm.disableDraw();
       let fg;
-      if (e.shape === 'Circle') {
+      if (e.shape === 'Line') {
+        fg = turf.buffer(e.layer.toGeoJSON(), ((corridorWidthM || 400) / 2) / 1000, { units: 'kilometers', steps: 8 });
+      } else if (e.shape === 'Circle') {
         const c = e.layer.getLatLng();
         fg = turf.circle([c.lng, c.lat], e.layer.getRadius() / 1000, { steps: 64, units: 'kilometers' });
       } else {
         fg = e.layer.toGeoJSON();
       }
       map.removeLayer(e.layer);
+      if (!fg || !fg.geometry) { plannerDrawing = false; return; }
       plannerFG = fg;
       plannerGroup.clearLayers();
       // v2: the drawn shape is the controlled ground area (GRB outer) → preview red.
@@ -223,6 +231,7 @@ const vpBridge = {
   // ground area = GRB outer, buffer INWARD by S_GRB → CV, S_CV → FG.
   buildAndDraw(SCV, SGRB, variant, CD) {
     if (!plannerFG) return null;
+    plannerAdjacent.clearLayers(); lastCV = null; // adjacent volume hidden on recompute
     const valid = (g) => g && g.geometry && turf.area(g) > 1;
     let fg, cv, grb;
     if (variant === 'v2') {
@@ -260,6 +269,7 @@ const vpBridge = {
       });
       pilotToCV = maxD;
     }
+    lastCV = cv; // enable the adjacent-volume toggle
     // FG realistic-size guard: side ≥ 3·CD (√area as a representative width).
     const fgSide = Math.sqrt(turf.area(fg));
     const fgTooSmall = CD ? fgSide < 3 * CD : false;
@@ -269,9 +279,18 @@ const vpBridge = {
       areas: { fg: turf.area(fg), cv: turf.area(cv), grb: turf.area(grb) },
     };
   },
+  // Draw/hide the adjacent volume (CV buffered outward by S_AV); returns its area
+  // and how many restrictions fall inside it.
+  toggleAdjacent(SAV, show) {
+    plannerAdjacent.clearLayers();
+    if (!show || !lastCV) return null;
+    const av = turf.buffer(lastCV, SAV / 1000, { units: 'kilometers', steps: 24 });
+    L.geoJSON(av, { style: VP_STYLE.adj }).addTo(plannerAdjacent);
+    return { area: turf.area(av), overlaps: findZoneOverlaps(av).length };
+  },
   clear() {
-    plannerFG = null; pilotLL = null; toldLL = null;
-    plannerGroup.clearLayers(); plannerMarkers.clearLayers();
+    plannerFG = null; pilotLL = null; toldLL = null; lastCV = null;
+    plannerGroup.clearLayers(); plannerMarkers.clearLayers(); plannerAdjacent.clearLayers();
   },
 };
 

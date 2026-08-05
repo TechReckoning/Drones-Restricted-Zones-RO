@@ -37,8 +37,10 @@ const FORM_HTML = `
     <div class="vp-shape">
       <button type="button" id="vp-draw-poly" class="btn btn-ghost btn-mini">✏️ Polygon</button>
       <button type="button" id="vp-draw-circle" class="btn btn-ghost btn-mini">⭕ Circle</button>
+      <button type="button" id="vp-draw-corridor" class="btn btn-ghost btn-mini">↔ Corridor</button>
       <button type="button" id="vp-clear" class="btn btn-ghost btn-mini">Clear</button>
     </div>
+    <label class="vp-f vp-load"><span>Corridor width (m)</span><input id="vp-corridor-w" type="number" min="1" step="any" value="400" /></label>
     <p class="hint muted" id="vp-shape-status">No area drawn yet.</p>
     <div class="vp-shape">
       <button type="button" id="vp-set-pilot" class="btn btn-ghost btn-mini">📍 Pilot</button>
@@ -160,11 +162,14 @@ export function initVolumePlanner({ container, billing, bridge }) {
   const variant = () => q('input[name="vp-variant"]:checked').value;
   const startDraw = (shape) => {
     if (!billing.access || !bridge) return;
-    q('#vp-shape-status').textContent = `Click on the map to draw the ${variant() === 'v2' ? 'controlled ground area' : 'flight geography'}…`;
-    bridge.drawFG(shape, variant(), () => setShapeStatus(true));
+    q('#vp-shape-status').textContent = shape === 'corridor'
+      ? 'Click to add corridor points, double-click to finish…'
+      : `Click on the map to draw the ${variant() === 'v2' ? 'controlled ground area' : 'flight geography'}…`;
+    bridge.drawFG(shape, variant(), () => setShapeStatus(true), num('vp-corridor-w', 400));
   };
   q('#vp-draw-poly').addEventListener('click', () => startDraw('polygon'));
   q('#vp-draw-circle').addEventListener('click', () => startDraw('circle'));
+  q('#vp-draw-corridor').addEventListener('click', () => startDraw('corridor'));
   q('#vp-clear').addEventListener('click', () => { bridge && bridge.clear(); setShapeStatus(false); q('#vp-results').innerHTML = ''; });
   // Switching build method invalidates the drawn shape (FG vs controlled area).
   container.querySelectorAll('input[name="vp-variant"]').forEach((r) =>
@@ -210,6 +215,17 @@ export function initVolumePlanner({ container, billing, bridge }) {
         const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
         downloadKml(kml, `operational-volume-${stamp}.kml`);
       };
+    }
+    // Adjacent-volume toggle.
+    const adjCb = q('#vp-adj');
+    if (adjCb && extra && !extra.collapsed) {
+      adjCb.addEventListener('change', () => {
+        const info = q('#vp-adj-info');
+        const r = bridge && bridge.toggleAdjacent(res.SAV, adjCb.checked);
+        info.textContent = (adjCb.checked && r)
+          ? `Adjacent volume ${(r.area / 1e6).toFixed(1)} km² · ${r.overlaps} restriction${r.overlaps === 1 ? '' : 's'} inside`
+          : '';
+      });
     }
   });
 }
@@ -282,6 +298,8 @@ function renderFootprint(extra, res) {
     ${tooSmall}
     ${vlos}
     ${body}
+    <label class="vp-adj-toggle"><input type="checkbox" id="vp-adj" /> <span>Show adjacent volume${res ? ` (S_AV ${r1(res.SAV)} m)` : ''}</span></label>
+    <div id="vp-adj-info" class="hint muted"></div>
     <button type="button" id="vp-export" class="btn btn-primary btn-block">⬇ Export KML (FG · CV · GRB${extra.pilot ? ' · Pilot' : ''})</button>
   </div>`;
 }
