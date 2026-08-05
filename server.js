@@ -38,7 +38,11 @@ if (process.env.BETA_MODE === '1' || process.env.BETA_MODE === 'true') {
   app.use((req, res, next) => {
     res.set('X-Robots-Tag', 'noindex, nofollow');        // keep staging out of search
     if (!BETA_PASSWORD) return next();                    // noindex only, no password
-    if (req.path === '/api/billing/webhook') return next(); // let Stripe reach the webhook
+    // Only gate the UI (pages/assets). The /api routes carry their own
+    // `Authorization: Bearer <supabase JWT>` and are protected by requireUser /
+    // requireEntitlement — Basic-auth'ing them too would clash with that header
+    // (e.g. it would 401 the checkout call). The Stripe webhook is under /api too.
+    if (req.path.startsWith('/api/')) return next();
     const [scheme, b64] = (req.headers.authorization || '').split(' ');
     if (scheme === 'Basic' && b64) {
       const [u, p] = Buffer.from(b64, 'base64').toString().split(':');
