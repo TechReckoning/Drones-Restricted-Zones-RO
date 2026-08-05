@@ -28,6 +28,27 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
+// ---- Beta / staging gate (env-driven; a no-op in production) ----
+// On the staging service set BETA_MODE=1 to mark the whole site noindex, and
+// optionally BETA_PASSWORD to require a shared password (HTTP Basic Auth) so the
+// public and unfinished features don't collide. Production leaves these unset.
+if (process.env.BETA_MODE === '1' || process.env.BETA_MODE === 'true') {
+  const BETA_USER = process.env.BETA_USER || 'beta';
+  const BETA_PASSWORD = process.env.BETA_PASSWORD || '';
+  app.use((req, res, next) => {
+    res.set('X-Robots-Tag', 'noindex, nofollow');        // keep staging out of search
+    if (!BETA_PASSWORD) return next();                    // noindex only, no password
+    if (req.path === '/api/billing/webhook') return next(); // let Stripe reach the webhook
+    const [scheme, b64] = (req.headers.authorization || '').split(' ');
+    if (scheme === 'Basic' && b64) {
+      const [u, p] = Buffer.from(b64, 'base64').toString().split(':');
+      if (u === BETA_USER && p === BETA_PASSWORD) return next();
+    }
+    res.set('WWW-Authenticate', 'Basic realm="Drones Restricted Zones RO (beta)"');
+    return res.status(401).send('Beta access required.');
+  });
+}
+
 // The Stripe webhook must see the RAW request body to verify its signature, so
 // it is registered with express.raw BEFORE the JSON parser below consumes it.
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), billingWebhookHandler);
