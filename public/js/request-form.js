@@ -47,9 +47,7 @@ export const request = {
   init(hooks) {
     getFlight = hooks.getFlight || getFlight;
     el('request-btn').addEventListener('click', () => this.openWizard());
-    el('requests-btn').addEventListener('click', () => this.openRequests());
     el('requests-list').addEventListener('click', onRequestsListClick);
-    auth.onChange((user) => el('requests-btn').classList.toggle('hidden', !(user && auth.configured)));
   },
 
   async openWizard() {
@@ -61,8 +59,8 @@ export const request = {
     openModal('request-modal');
   },
 
-  async openRequests() {
-    openModal('requests-modal');
+  // Populate the Requests tab of the My-data hub (called when that tab is opened).
+  async loadRequests() {
     el('requests-list').innerHTML = '<p class="hint">Loading…</p>';
     const res = await api('/api/requests');
     reqCache = res.ok ? (await res.json()).items : [];
@@ -350,7 +348,7 @@ async function onRequestsListClick(e) {
   } else if (btn.dataset.act === 'delete') {
     if (!window.confirm('Delete this saved request?')) return;
     const res = await api('/api/requests/' + id, { method: 'DELETE' });
-    if (res.ok || res.status === 204) request.openRequests(); else toast('Delete failed.');
+    if (res.ok || res.status === 204) request.loadRequests(); else toast('Delete failed.');
   }
 }
 

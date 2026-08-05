@@ -9,7 +9,7 @@
 import { computeVolume, r1 } from './volume-planner-calc.js';
 import { buildVolumeKml, downloadKml } from './kml.js';
 import { libraryData } from './library.js';
-import { auth, toast } from './auth.js';
+import { auth, toast, closeModals } from './auth.js';
 
 const MANEUVERS = {
   multirotor: {
@@ -31,9 +31,8 @@ const FORM_HTML = `
       Volume → Ground Risk Buffer) per the LBA/EU 2019/947 method.</p>
     <div class="vp-shape">
       <button type="button" id="vp-save" class="btn btn-ghost btn-mini">💾 Save plan</button>
-      <button type="button" id="vp-myplans" class="btn btn-ghost btn-mini">📂 My plans</button>
+      <span class="hint muted vp-plans-hint">Open saved plans from <strong>📁 My data → Plans</strong>.</span>
     </div>
-    <div id="vp-plans-list" class="vp-plans-list hidden"></div>
 
     <div class="vp-group">Operational area</div>
     <div class="vp-seg" role="radiogroup" aria-label="Build method">
@@ -194,21 +193,28 @@ export function initVolumePlanner({ container, billing, bridge }) {
   };
 
   // ---- Save / reopen plans (owner-scoped, Pro) ----
+  // The plans LIST lives in the My-data hub (📁 My data → Plans); the panel keeps
+  // only the contextual "Save plan" action. loadPlans() renders into that hub pane
+  // (document-level #plans-list, outside this planner's scoped `q`).
   const plansApi = (path, opts = {}) => fetch('/api/plans' + path, {
     ...opts, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + auth.token, ...(opts.headers || {}) },
   });
+  const plansBox = () => document.getElementById('plans-list');
   let plansCache = [];
   async function loadPlans() {
-    const box = q('#vp-plans-list');
+    const box = plansBox();
+    if (!box) return;
+    box.innerHTML = '<p class="hint muted">Loading…</p>';
     try {
       const res = await plansApi('', {});
+      if (res.status === 402) { box.innerHTML = '<p class="hint muted">Saved plans are a Pro feature — subscribe to save and reopen operational-volume plans.</p>'; return; }
       if (!res.ok) { box.innerHTML = '<p class="hint muted">Could not load plans.</p>'; return; }
       plansCache = (await res.json()).items || [];
       box.innerHTML = plansCache.length
         ? plansCache.map((p) => `<div class="vp-plan-row" data-id="${esc(p.id)}"><span>${esc(p.name)}</span>
             <span class="vp-plan-acts"><button type="button" class="btn btn-mini" data-act="open">Open</button>
             <button type="button" class="btn btn-mini btn-danger" data-act="del">✕</button></span></div>`).join('')
-        : '<p class="hint muted">No saved plans yet.</p>';
+        : '<p class="hint muted">No saved plans yet. Draw an area in the Volume Planner and use 💾 Save plan.</p>';
     } catch { box.innerHTML = '<p class="hint muted">Could not load plans.</p>'; }
   }
   q('#vp-save').addEventListener('click', async () => {
@@ -219,15 +225,10 @@ export function initVolumePlanner({ container, billing, bridge }) {
     const data = { variant: variant(), params: collectInputs(), ...bridge.getState() };
     const res = await plansApi('', { method: 'POST', body: JSON.stringify({ name, data }) });
     toast(res.ok ? `Saved "${name}".` : 'Save failed.');
-    if (res.ok && !q('#vp-plans-list').classList.contains('hidden')) loadPlans();
+    if (res.ok && plansBox()) loadPlans();
   });
-  q('#vp-myplans').addEventListener('click', () => {
-    if (!billing.access) return;
-    const box = q('#vp-plans-list');
-    box.classList.toggle('hidden');
-    if (!box.classList.contains('hidden')) loadPlans();
-  });
-  q('#vp-plans-list').addEventListener('click', async (e) => {
+  const pbox = plansBox();
+  if (pbox) pbox.addEventListener('click', async (e) => {
     const row = e.target.closest('.vp-plan-row'); if (!row) return;
     const id = row.dataset.id;
     const act = e.target.closest('button') && e.target.closest('button').dataset.act;
@@ -241,7 +242,7 @@ export function initVolumePlanner({ container, billing, bridge }) {
       applyInputs(d.params);
       if (bridge) bridge.loadState(d.geometry, d.variant || 'v1', d.pilot, d.told);
       setShapeStatus(Boolean(d.geometry));
-      q('#vp-plans-list').classList.add('hidden');
+      closeModals(); // leave the hub and return to the map + planner
       q('#vp-compute').click(); // redraw the volumes
     }
   });
@@ -306,6 +307,9 @@ export function initVolumePlanner({ container, billing, bridge }) {
       });
     }
   });
+
+  // Exposed so the My-data hub's Plans tab can populate itself on demand.
+  return { loadPlans };
 }
 
 // Schematic (not-to-scale) side + top views, LBA-style, with the real dimensions

@@ -48,8 +48,14 @@ const DRONE_FIELDS = [
 // In-memory copies so the request wizard can read them without refetching.
 export const libraryData = { operator: null, pilots: [], drones: [] };
 
+// Lazy loaders for the hub tabs that are owned by other modules (Zones →
+// history.js, Requests → request-form.js, Plans → volume-planner.js). Wired in
+// library.init({ tabLoaders }) from app.js; each fires when its tab is opened.
+let tabLoaders = {};
+
 export const library = {
-  init() {
+  init(hooks = {}) {
+    tabLoaders = hooks.tabLoaders || {};
     el('library-btn').addEventListener('click', () => this.open());
     document.querySelectorAll('.lib-tab').forEach((t) =>
       t.addEventListener('click', () => selectTab(t.dataset.tab))
@@ -68,10 +74,12 @@ export const library = {
   },
 };
 
+const LIB_PANES = ['operator', 'pilots', 'drones', 'zones', 'requests', 'plans', 'privacy'];
 function selectTab(name) {
   document.querySelectorAll('.lib-tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
-  ['operator', 'pilots', 'drones', 'privacy'].forEach((p) => el('lib-' + p).classList.toggle('hidden', p !== name));
+  LIB_PANES.forEach((p) => el('lib-' + p).classList.toggle('hidden', p !== name));
   if (name === 'privacy') renderPrivacy();
+  else if (tabLoaders[name]) tabLoaders[name]();
 }
 
 // ---------- Privacy: GDPR export + account deletion ----------

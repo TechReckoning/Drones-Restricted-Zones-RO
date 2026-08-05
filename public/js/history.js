@@ -14,9 +14,11 @@ export const history = {
   init(h) {
     hooks = { ...hooks, ...h };
     el('save-flight-btn').addEventListener('click', () => this.saveCurrent());
-    el('history-btn').addEventListener('click', () => this.open());
     el('history-list').addEventListener('click', onListClick);
   },
+
+  // Populate the Zones tab of the My-data hub (called when that tab is opened).
+  load() { return refreshList(); },
 
   async saveCurrent() {
     if (!auth.configured) { toast('Accounts are not configured on this server yet.'); return; }
@@ -43,11 +45,6 @@ export const history = {
       return;
     }
     toast('Saved to your history.');
-  },
-
-  async open() {
-    openModal('history-modal');
-    await refreshList();
   },
 };
 

@@ -1158,7 +1158,7 @@ function currentFlightForSave() {
 }
 
 // ---- Left-panel mode switch: Flying zone ↔ Volume Planner ----
-initVolumePlanner({ container: $('mode-volume-body'), billing, bridge: vpBridge });
+const planner = initVolumePlanner({ container: $('mode-volume-body'), billing, bridge: vpBridge });
 document.querySelectorAll('.mode-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
@@ -1180,7 +1180,15 @@ auth.init().then(() => {
     loadFlight: (geometry) => loadSavedFlight(geometry),
   });
   billing.init();
-  library.init();
+  // The My-data hub owns the Zones / Requests / Plans tabs; each lazy-loads from
+  // the module that owns that data when its tab is opened.
+  library.init({
+    tabLoaders: {
+      zones: () => history.load(),
+      requests: () => request.loadRequests(),
+      plans: () => planner.loadPlans(),
+    },
+  });
   request.init({
     getFlight: () => state.lastFlight
       ? {

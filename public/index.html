@@ -30,9 +30,7 @@
       <button id="refresh-btn" class="btn btn-ghost" title="Fetch the latest data from ROMATSA">↻ Refresh</button>
       <span class="header-divider" aria-hidden="true"></span>
       <span id="user-email" class="user-email hidden"></span>
-      <button id="library-btn" class="btn btn-ghost hidden" title="Your operator profile, pilots and drones">👤 Profile</button>
-      <button id="history-btn" class="btn btn-ghost hidden" title="Your saved flying zones">🗂 My zones</button>
-      <button id="requests-btn" class="btn btn-ghost hidden" title="Your generated flight requests">📄 Requests</button>
+      <button id="library-btn" class="btn btn-ghost hidden" title="Your profile, equipment, saved zones, requests and plans">📁 My data</button>
       <button id="auth-btn" class="btn btn-primary">Sign in</button>
     </div>
   </header>
@@ -135,15 +133,6 @@
     </div>
   </div>
 
-  <!-- History drawer -->
-  <div id="history-modal" class="modal-overlay hidden">
-    <div class="modal modal-wide">
-      <button class="modal-close" data-close aria-label="Close">×</button>
-      <h2>My flying zones</h2>
-      <div id="history-list" class="history-list"></div>
-    </div>
-  </div>
-
   <!-- Subscribe modal -->
   <div id="subscribe-modal" class="modal-overlay hidden">
     <div class="modal">
@@ -181,21 +170,27 @@
     </div>
   </div>
 
-  <!-- Profile & equipment library -->
+  <!-- My data & library hub: profile, equipment, and saved zones / requests / plans -->
   <div id="library-modal" class="modal-overlay hidden">
     <div class="modal modal-wide">
       <button class="modal-close" data-close aria-label="Close">×</button>
-      <h2>Profile &amp; equipment</h2>
-      <p class="hint">Saved once, reused to pre-fill your flight-approval requests.</p>
+      <h2>My data &amp; library</h2>
+      <p class="hint">Your operator profile and equipment, plus everything you've saved — zones, requests and plans — in one place.</p>
       <div class="lib-tabs">
         <button class="lib-tab active" data-tab="operator">Operator</button>
         <button class="lib-tab" data-tab="pilots">Pilots</button>
         <button class="lib-tab" data-tab="drones">Drones</button>
+        <button class="lib-tab" data-tab="zones">Zones</button>
+        <button class="lib-tab" data-tab="requests">Requests</button>
+        <button class="lib-tab" data-tab="plans">Plans</button>
         <button class="lib-tab" data-tab="privacy">Privacy</button>
       </div>
       <div id="lib-operator" class="lib-pane"></div>
       <div id="lib-pilots" class="lib-pane hidden"></div>
       <div id="lib-drones" class="lib-pane hidden"></div>
+      <div id="lib-zones" class="lib-pane hidden"><div id="history-list" class="history-list"></div></div>
+      <div id="lib-requests" class="lib-pane hidden"><div id="requests-list" class="history-list"></div></div>
+      <div id="lib-plans" class="lib-pane hidden"><div id="plans-list" class="history-list"></div></div>
       <div id="lib-privacy" class="lib-pane hidden"></div>
     </div>
   </div>
@@ -206,15 +201,6 @@
       <button class="modal-close" data-close aria-label="Close">×</button>
       <h2>Generate flight request</h2>
       <div id="request-body"></div>
-    </div>
-  </div>
-
-  <!-- Generated requests history -->
-  <div id="requests-modal" class="modal-overlay hidden">
-    <div class="modal modal-wide">
-      <button class="modal-close" data-close aria-label="Close">×</button>
-      <h2>My flight requests</h2>
-      <div id="requests-list" class="history-list"></div>
     </div>
   </div>
 
