@@ -9,6 +9,7 @@
 import { computeVolume, r1 } from './volume-planner-calc.js';
 import { buildVolumeKml, downloadKml } from './kml.js';
 import { libraryData } from './library.js';
+import { auth, toast } from './auth.js';
 
 const MANEUVERS = {
   multirotor: {
@@ -28,6 +29,11 @@ const FORM_HTML = `
     <div class="vp-lockbadge">🔒 Pro feature — sign in to use</div>
     <p class="hint">Compute the SORA operational volume (Flight Geography → Contingency
       Volume → Ground Risk Buffer) per the LBA/EU 2019/947 method.</p>
+    <div class="vp-shape">
+      <button type="button" id="vp-save" class="btn btn-ghost btn-mini">💾 Save plan</button>
+      <button type="button" id="vp-myplans" class="btn btn-ghost btn-mini">📂 My plans</button>
+    </div>
+    <div id="vp-plans-list" class="vp-plans-list hidden"></div>
 
     <div class="vp-group">Operational area</div>
     <div class="vp-seg" role="radiogroup" aria-label="Build method">
@@ -158,6 +164,88 @@ export function initVolumePlanner({ container, billing, bridge }) {
   q('#vp-drone').addEventListener('change', () => applyDrone((libraryData.drones || []).find((x) => x.id === q('#vp-drone').value)));
   populateDrones();
 
+  // ---- All planner inputs → object (for compute + save) ----
+  const collectInputs = () => ({
+    aircraftType: q('input[name="vp-aircraft"]:checked').value,
+    V0: num('vp-v0', 10), CD: num('vp-cd', 1), HFG: num('vp-hfg', 100),
+    heightMethod: q('#vp-height').value,
+    horizontalCM: q('#vp-hcm').value, verticalCM: q('#vp-vcm').value, grbMethod: q('#vp-grb').value,
+    pitchAngle: num('vp-pitch', 45), rollAngle: num('vp-roll', 30), glideRatio: num('vp-glide', 10),
+    parachuteOpenTime: num('vp-chute-t', 3), descentRate: num('vp-vz', 5), Vwind: num('vp-wind', 8),
+    SGPS: num('vp-sgps', 3), SPos: num('vp-spos', 3), SK: num('vp-sk', 1),
+    reactionTime: num('vp-treact', 1), groundVisibility: num('vp-gv', 5000),
+    corridorWidth: num('vp-corridor-w', 400),
+  });
+  const applyInputs = (p) => {
+    if (!p) return;
+    const setV = (id, v) => { if (v != null) q('#' + id).value = v; };
+    if (p.aircraftType) { const r = q(`input[name="vp-aircraft"][value="${p.aircraftType}"]`); if (r) r.checked = true; }
+    syncAircraft(); // rebuild maneuver options for the aircraft type
+    if (p.horizontalCM) q('#vp-hcm').value = p.horizontalCM;
+    if (p.verticalCM) q('#vp-vcm').value = p.verticalCM;
+    if (p.grbMethod) q('#vp-grb').value = p.grbMethod;
+    if (p.heightMethod) q('#vp-height').value = p.heightMethod;
+    setV('vp-v0', p.V0); setV('vp-cd', p.CD); setV('vp-hfg', p.HFG);
+    setV('vp-pitch', p.pitchAngle); setV('vp-roll', p.rollAngle); setV('vp-glide', p.glideRatio);
+    setV('vp-chute-t', p.parachuteOpenTime); setV('vp-vz', p.descentRate); setV('vp-wind', p.Vwind);
+    setV('vp-sgps', p.SGPS); setV('vp-spos', p.SPos); setV('vp-sk', p.SK);
+    setV('vp-treact', p.reactionTime); setV('vp-gv', p.groundVisibility); setV('vp-corridor-w', p.corridorWidth);
+    syncConditional();
+  };
+
+  // ---- Save / reopen plans (owner-scoped, Pro) ----
+  const plansApi = (path, opts = {}) => fetch('/api/plans' + path, {
+    ...opts, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + auth.token, ...(opts.headers || {}) },
+  });
+  let plansCache = [];
+  async function loadPlans() {
+    const box = q('#vp-plans-list');
+    try {
+      const res = await plansApi('', {});
+      if (!res.ok) { box.innerHTML = '<p class="hint muted">Could not load plans.</p>'; return; }
+      plansCache = (await res.json()).items || [];
+      box.innerHTML = plansCache.length
+        ? plansCache.map((p) => `<div class="vp-plan-row" data-id="${esc(p.id)}"><span>${esc(p.name)}</span>
+            <span class="vp-plan-acts"><button type="button" class="btn btn-mini" data-act="open">Open</button>
+            <button type="button" class="btn btn-mini btn-danger" data-act="del">✕</button></span></div>`).join('')
+        : '<p class="hint muted">No saved plans yet.</p>';
+    } catch { box.innerHTML = '<p class="hint muted">Could not load plans.</p>'; }
+  }
+  q('#vp-save').addEventListener('click', async () => {
+    if (!billing.access) return;
+    if (!bridge || !bridge.hasFG()) { q('#vp-shape-status').textContent = 'Draw an area first, then save.'; return; }
+    const name = (window.prompt('Plan name:', 'My plan') || '').trim();
+    if (!name) return;
+    const data = { variant: variant(), params: collectInputs(), ...bridge.getState() };
+    const res = await plansApi('', { method: 'POST', body: JSON.stringify({ name, data }) });
+    toast(res.ok ? `Saved "${name}".` : 'Save failed.');
+    if (res.ok && !q('#vp-plans-list').classList.contains('hidden')) loadPlans();
+  });
+  q('#vp-myplans').addEventListener('click', () => {
+    if (!billing.access) return;
+    const box = q('#vp-plans-list');
+    box.classList.toggle('hidden');
+    if (!box.classList.contains('hidden')) loadPlans();
+  });
+  q('#vp-plans-list').addEventListener('click', async (e) => {
+    const row = e.target.closest('.vp-plan-row'); if (!row) return;
+    const id = row.dataset.id;
+    const act = e.target.closest('button') && e.target.closest('button').dataset.act;
+    if (act === 'del') {
+      if (!window.confirm('Delete this plan?')) return;
+      await plansApi('/' + id, { method: 'DELETE' }); loadPlans();
+    } else if (act === 'open') {
+      const p = plansCache.find((x) => x.id === id); if (!p) return;
+      const d = p.data || {};
+      const vr = q(`input[name="vp-variant"][value="${d.variant || 'v1'}"]`); if (vr) vr.checked = true;
+      applyInputs(d.params);
+      if (bridge) bridge.loadState(d.geometry, d.variant || 'v1', d.pilot, d.told);
+      setShapeStatus(Boolean(d.geometry));
+      q('#vp-plans-list').classList.add('hidden');
+      q('#vp-compute').click(); // redraw the volumes
+    }
+  });
+
   // ---- Draw the flight geography (via the map bridge) ----
   const variant = () => q('input[name="vp-variant"]:checked').value;
   const startDraw = (shape) => {
@@ -186,17 +274,7 @@ export function initVolumePlanner({ container, billing, bridge }) {
   // ---- Compute → breakdown (+ draw volumes & overlap when an FG is drawn) ----
   q('#vp-compute').addEventListener('click', () => {
     if (!billing.access) return; // gate already blocks, belt-and-braces
-    const res = computeVolume({
-      aircraftType: q('input[name="vp-aircraft"]:checked').value,
-      V0: num('vp-v0', 10), CD: num('vp-cd', 1), HFG: num('vp-hfg', 100),
-      heightMethod: q('#vp-height').value,
-      horizontalCM: q('#vp-hcm').value, verticalCM: q('#vp-vcm').value, grbMethod: q('#vp-grb').value,
-      pitchAngle: num('vp-pitch', 45), rollAngle: num('vp-roll', 30),
-      glideRatio: num('vp-glide', 10),
-      parachuteOpenTime: num('vp-chute-t', 3), descentRate: num('vp-vz', 5), Vwind: num('vp-wind', 8),
-      SGPS: num('vp-sgps', 3), SPos: num('vp-spos', 3), SK: num('vp-sk', 1),
-      reactionTime: num('vp-treact', 1), groundVisibility: num('vp-gv', 5000),
-    });
+    const res = computeVolume(collectInputs());
     const extra = (bridge && bridge.hasFG()) ? bridge.buildAndDraw(res.SCV, res.SGRB, variant(), res.inputs.CD) : null;
     renderResults(q('#vp-results'), res, extra);
     // Wire the export button (only present when volumes were drawn).

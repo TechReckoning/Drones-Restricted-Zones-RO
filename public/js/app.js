@@ -292,6 +292,25 @@ const vpBridge = {
     plannerFG = null; pilotLL = null; toldLL = null; lastCV = null;
     plannerGroup.clearLayers(); plannerMarkers.clearLayers(); plannerAdjacent.clearLayers();
   },
+  // Snapshot the drawn geometry + markers for saving.
+  getState() {
+    return {
+      geometry: plannerFG,
+      pilot: pilotLL ? { lat: pilotLL.lat, lng: pilotLL.lng } : null,
+      told: toldLL ? { lat: toldLL.lat, lng: toldLL.lng } : null,
+    };
+  },
+  // Restore a saved plan's geometry + markers (variant sets the preview colour).
+  loadState(geometry, variant, pilot, told) {
+    this.clear();
+    if (!geometry || !geometry.geometry) return;
+    plannerFG = geometry;
+    pilotLL = pilot ? L.latLng(pilot.lat, pilot.lng) : null;
+    toldLL = told ? L.latLng(told.lat, told.lng) : null;
+    L.geoJSON(geometry, { style: variant === 'v2' ? VP_STYLE.grb : VP_STYLE.fg }).addTo(plannerGroup);
+    redrawPlannerMarkers();
+    try { map.fitBounds(L.geoJSON(geometry).getBounds(), { padding: [60, 60] }); } catch { /* */ }
+  },
 };
 
 // =================================================================== //
