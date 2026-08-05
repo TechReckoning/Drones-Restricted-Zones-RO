@@ -1178,6 +1178,14 @@ auth.init().then(() => {
   history.init({
     getFlight: currentFlightForSave,
     loadFlight: (geometry) => loadSavedFlight(geometry),
+    // Cross-links from a saved-zone row in the My-data hub:
+    // load the zone onto the map (sets state.lastFlight + overlaps) then open the
+    // request wizard; or hand its geometry to the Volume Planner as flight geography.
+    generateRequest: (geometry) => { loadSavedFlight(geometry); request.openWizard(); },
+    useInPlanner: (geometry) => {
+      document.querySelector('.mode-btn[data-mode="volume"]')?.click();
+      planner.loadGeometry(geometry);
+    },
   });
   billing.init();
   // The My-data hub owns the Zones / Requests / Plans tabs; each lazy-loads from

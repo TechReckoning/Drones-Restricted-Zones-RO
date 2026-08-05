@@ -82,7 +82,9 @@ function renderRow(f) {
       }</div>
     </div>
     <div class="hr-actions">
-      <button class="btn btn-mini" data-act="load">Load</button>
+      <button class="btn btn-mini" data-act="load" title="Load this zone onto the map">Load</button>
+      <button class="btn btn-mini" data-act="request" title="Generate a flight request from this zone">📄 Request</button>
+      <button class="btn btn-mini" data-act="planner" title="Use this zone as the flight geography in the Volume Planner">🧊 Planner</button>
       <button class="btn btn-mini" data-act="rename">Rename</button>
       <button class="btn btn-mini btn-danger" data-act="delete">Delete</button>
     </div>
@@ -100,6 +102,13 @@ async function onListClick(e) {
     closeModals();
     hooks.loadFlight(flight.geometry, flight);
     toast(`Loaded “${flight.name}”.`);
+  } else if (btn.dataset.act === 'request') {
+    closeModals();
+    hooks.generateRequest?.(flight.geometry);
+  } else if (btn.dataset.act === 'planner') {
+    closeModals();
+    hooks.useInPlanner?.(flight.geometry);
+    toast(`Loaded “${flight.name}” into the Volume Planner.`);
   } else if (btn.dataset.act === 'rename') {
     const name = window.prompt('Rename flying zone:', flight.name);
     if (name === null || !name.trim()) return;

@@ -308,8 +308,20 @@ export function initVolumePlanner({ container, billing, bridge }) {
     }
   });
 
-  // Exposed so the My-data hub's Plans tab can populate itself on demand.
-  return { loadPlans };
+  // Load an externally-supplied area (a saved flying zone opened from the hub) as
+  // the flight geography, ready to dimension. Accepts a Feature or a bare geometry.
+  function loadGeometry(geom) {
+    if (!geom) return;
+    const feature = geom.type === 'Feature' ? geom : { type: 'Feature', geometry: geom, properties: {} };
+    const vr = q('input[name="vp-variant"][value="v1"]'); if (vr) vr.checked = true;
+    if (bridge) bridge.loadState(feature, 'v1');
+    setShapeStatus(true);
+    if (billing.access) q('#vp-compute').click(); // draw volumes now for Pro users
+  }
+
+  // Exposed so the My-data hub can drive the planner (populate the Plans tab, and
+  // open a saved zone as the flight geography).
+  return { loadPlans, loadGeometry };
 }
 
 // Schematic (not-to-scale) side + top views, LBA-style, with the real dimensions
