@@ -74,13 +74,11 @@ function render() {
 function renderLoggedIn() {
   el('user-email').textContent = auth.user.email || 'Signed in';
   el('user-email').classList.remove('hidden');
-  el('history-btn').classList.remove('hidden');
   el('auth-btn').textContent = 'Sign out';
 }
 
 function renderLoggedOut() {
   el('user-email').classList.add('hidden');
-  el('history-btn').classList.add('hidden');
   el('auth-btn').textContent = 'Sign in';
 }
 

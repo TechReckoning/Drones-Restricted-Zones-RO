@@ -38,7 +38,11 @@ if (process.env.BETA_MODE === '1' || process.env.BETA_MODE === 'true') {
   app.use((req, res, next) => {
     res.set('X-Robots-Tag', 'noindex, nofollow');        // keep staging out of search
     if (!BETA_PASSWORD) return next();                    // noindex only, no password
-    if (req.path === '/api/billing/webhook') return next(); // let Stripe reach the webhook
+    // Only gate the UI (pages/assets). The /api routes carry their own
+    // `Authorization: Bearer <supabase JWT>` and are protected by requireUser /
+    // requireEntitlement — Basic-auth'ing them too would clash with that header
+    // (e.g. it would 401 the checkout call). The Stripe webhook is under /api too.
+    if (req.path.startsWith('/api/')) return next();
     const [scheme, b64] = (req.headers.authorization || '').split(' ');
     if (scheme === 'Basic' && b64) {
       const [u, p] = Buffer.from(b64, 'base64').toString().split(':');
@@ -433,6 +437,8 @@ function registerLibraryCrud(path, table, fields) {
 registerLibraryCrud('pilots', 'pilots', ['name', 'phone', 'qualifications']);
 registerLibraryCrud('drones', 'drones', ['registration', 'serial', 'manufacturer', 'model', 'operating_class', 'category', 'operator_code', 'mtom_kg',
   'aircraft_type', 'v0_ms', 'cd_m', 'v_wind_ms', 'glide_ratio']);
+// Saved Volume Planner plans (Phase 2). `data` is the full plan blob.
+registerLibraryCrud('plans', 'volume_plans', ['name', 'data']);
 // Saved flight-request history (Phase B). `fields` is the jsonb PDF field map.
 registerLibraryCrud('requests', 'flight_requests', ['form_type', 'label', 'fields']);
 
@@ -443,7 +449,7 @@ registerLibraryCrud('requests', 'flight_requests', ['form_type', 'label', 'field
 // are unconditional and must keep working after a trial/subscription lapses.
 // ---------------------------------------------------------------------------
 
-const USER_TABLES = ['operator_profile', 'pilots', 'drones', 'flight_zones', 'flight_requests', 'subscriptions'];
+const USER_TABLES = ['operator_profile', 'pilots', 'drones', 'flight_zones', 'flight_requests', 'volume_plans', 'subscriptions'];
 
 app.get('/api/account/export', requireUser, async (req, res) => {
   const out = {

@@ -47,9 +47,7 @@ export const request = {
   init(hooks) {
     getFlight = hooks.getFlight || getFlight;
     el('request-btn').addEventListener('click', () => this.openWizard());
-    el('requests-btn').addEventListener('click', () => this.openRequests());
     el('requests-list').addEventListener('click', onRequestsListClick);
-    auth.onChange((user) => el('requests-btn').classList.toggle('hidden', !(user && auth.configured)));
   },
 
   async openWizard() {
@@ -61,8 +59,8 @@ export const request = {
     openModal('request-modal');
   },
 
-  async openRequests() {
-    openModal('requests-modal');
+  // Populate the Requests tab of the My-data hub (called when that tab is opened).
+  async loadRequests() {
     el('requests-list').innerHTML = '<p class="hint">Loading…</p>';
     const res = await api('/api/requests');
     reqCache = res.ok ? (await res.json()).items : [];
@@ -222,6 +220,35 @@ function buildFields(flight) {
   return { type, text, dropdowns, label };
 }
 
+// The Anexa dropdowns (/Ch combo boxes) carry [export, display] option pairs. To
+// fill one reliably across ALL viewers we must set the selected index /I (Acrobat
+// resolves combos by /I; pdf-lib updates only /V and leaves /I stale, so the field
+// keeps showing the template's default option), a valid export at /V, and a baked
+// appearance — all pointing at the SAME option. These helpers resolve our app value
+// to that option.
+function optionEntries(dropdown) {
+  const opt = dropdown.acroField.Opt();
+  if (!opt || !opt.asArray) return [];
+  return opt.asArray().map((e) => (e.asArray
+    ? { ex: e.asArray()[0].decodeText(), disp: e.asArray()[1].decodeText() }
+    : { ex: e.decodeText(), disp: e.decodeText() }));
+}
+function resolveOptionIndex(entries, want, dispPrefix) {
+  let i = -1;
+  if (dispPrefix) i = entries.findIndex((e) => e.disp.toUpperCase().startsWith(dispPrefix.toUpperCase()));
+  if (i < 0) i = entries.findIndex((e) => e.ex === want);
+  if (i < 0) i = entries.findIndex((e) => e.disp === want);
+  return i;
+}
+// Per-field quirks: the Clasa field has TWO options exporting "C2" (the C1 and C2
+// rows), so C0–C4 must be matched by the visible label prefix; the mod_operare
+// BVLOS option exports as "VBLOS" in the form.
+function dropdownTarget(name, val) {
+  if (name === 'Clasa' && /^C[0-4]$/.test(val)) return { want: val, dispPrefix: val + ' ' };
+  if (name === 'mod_operare' && val === 'BVLOS') return { want: 'VBLOS' };
+  return { want: val };
+}
+
 let _fontBytesPromise = null;
 function fontBytes() {
   if (!_fontBytesPromise) _fontBytesPromise = fetch('/fonts/DejaVuSans.ttf').then((r) => r.arrayBuffer());
@@ -229,7 +256,7 @@ function fontBytes() {
 }
 
 async function fillPdf(type, text, dropdowns) {
-  const { PDFName, PDFHexString, PDFString } = PDFLib;
+  const { PDFName, PDFHexString, PDFString, PDFNumber } = PDFLib;
   const path = type === 'solicitare' ? '/forms/anexa2_solicitare.pdf' : '/forms/anexa1_informare.pdf';
   const bytes = await (await fetch(path)).arrayBuffer();
   const pdf = await PDFLib.PDFDocument.load(bytes);
@@ -255,8 +282,27 @@ async function fillPdf(type, text, dropdowns) {
     if (!val) continue;
     try {
       const f = form.getDropdown(name);
-      f.acroField.dict.set(PDFName.of('V'), asStr(String(val)));
-      f.updateAppearances(font);
+      const dict = f.acroField.dict;
+      const entries = optionEntries(f);
+      const { want, dispPrefix } = dropdownTarget(name, String(val));
+      const idx = resolveOptionIndex(entries, want, dispPrefix);
+      if (idx >= 0) {
+        const { ex, disp } = entries[idx];
+        // Bake the appearance from the VISIBLE label (point /V at the display text
+        // just while regenerating), then set a valid export at /V and the selected
+        // index /I — so /AP-, /V- and /I-driven viewers all show the same option.
+        dict.set(PDFName.of('V'), asStr(disp));
+        f.updateAppearances(font);
+        dict.set(PDFName.of('V'), asStr(ex));
+        dict.set(PDFName.of('I'), pdf.context.obj([PDFNumber.of(idx)]));
+      } else {
+        // Value not among the form's options (e.g. a Specific-category C5/C6 drone
+        // on an Open-category Anexa) — show it literally, and drop any stale /I so
+        // /I-driven viewers don't fall back to the template's default option.
+        dict.set(PDFName.of('V'), asStr(String(val)));
+        dict.delete(PDFName.of('I'));
+        f.updateAppearances(font);
+      }
     } catch (e) { console.warn('dropdown', name, val, e.message); }
   }
   return pdf.save({ updateFieldAppearances: false });
@@ -302,7 +348,7 @@ async function onRequestsListClick(e) {
   } else if (btn.dataset.act === 'delete') {
     if (!window.confirm('Delete this saved request?')) return;
     const res = await api('/api/requests/' + id, { method: 'DELETE' });
-    if (res.ok || res.status === 204) request.openRequests(); else toast('Delete failed.');
+    if (res.ok || res.status === 204) request.loadRequests(); else toast('Delete failed.');
   }
 }
 

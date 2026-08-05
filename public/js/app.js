@@ -292,6 +292,25 @@ const vpBridge = {
     plannerFG = null; pilotLL = null; toldLL = null; lastCV = null;
     plannerGroup.clearLayers(); plannerMarkers.clearLayers(); plannerAdjacent.clearLayers();
   },
+  // Snapshot the drawn geometry + markers for saving.
+  getState() {
+    return {
+      geometry: plannerFG,
+      pilot: pilotLL ? { lat: pilotLL.lat, lng: pilotLL.lng } : null,
+      told: toldLL ? { lat: toldLL.lat, lng: toldLL.lng } : null,
+    };
+  },
+  // Restore a saved plan's geometry + markers (variant sets the preview colour).
+  loadState(geometry, variant, pilot, told) {
+    this.clear();
+    if (!geometry || !geometry.geometry) return;
+    plannerFG = geometry;
+    pilotLL = pilot ? L.latLng(pilot.lat, pilot.lng) : null;
+    toldLL = told ? L.latLng(told.lat, told.lng) : null;
+    L.geoJSON(geometry, { style: variant === 'v2' ? VP_STYLE.grb : VP_STYLE.fg }).addTo(plannerGroup);
+    redrawPlannerMarkers();
+    try { map.fitBounds(L.geoJSON(geometry).getBounds(), { padding: [60, 60] }); } catch { /* */ }
+  },
 };
 
 // =================================================================== //
@@ -1139,7 +1158,7 @@ function currentFlightForSave() {
 }
 
 // ---- Left-panel mode switch: Flying zone ↔ Volume Planner ----
-initVolumePlanner({ container: $('mode-volume-body'), billing, bridge: vpBridge });
+const planner = initVolumePlanner({ container: $('mode-volume-body'), billing, bridge: vpBridge });
 document.querySelectorAll('.mode-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
@@ -1159,9 +1178,25 @@ auth.init().then(() => {
   history.init({
     getFlight: currentFlightForSave,
     loadFlight: (geometry) => loadSavedFlight(geometry),
+    // Cross-links from a saved-zone row in the My-data hub:
+    // load the zone onto the map (sets state.lastFlight + overlaps) then open the
+    // request wizard; or hand its geometry to the Volume Planner as flight geography.
+    generateRequest: (geometry) => { loadSavedFlight(geometry); request.openWizard(); },
+    useInPlanner: (geometry) => {
+      document.querySelector('.mode-btn[data-mode="volume"]')?.click();
+      planner.loadGeometry(geometry);
+    },
   });
   billing.init();
-  library.init();
+  // The My-data hub owns the Zones / Requests / Plans tabs; each lazy-loads from
+  // the module that owns that data when its tab is opened.
+  library.init({
+    tabLoaders: {
+      zones: () => history.load(),
+      requests: () => request.loadRequests(),
+      plans: () => planner.loadPlans(),
+    },
+  });
   request.init({
     getFlight: () => state.lastFlight
       ? {
