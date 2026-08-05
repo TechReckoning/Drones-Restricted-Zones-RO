@@ -26,7 +26,10 @@ const DRONE_FIELDS = [
   { k: 'serial', label: 'Serial' },
   { k: 'manufacturer', label: 'Manufacturer' },
   { k: 'model', label: 'Model' },
-  { k: 'operating_class', label: 'Operating class', type: 'select', options: ['', 'C0', 'C1', 'C2', 'C3', 'C4', 'PRV250', 'PRV25'] },
+  // C0–C4 are Open-category class marks; C5/C6 are Specific-category marks (usable
+  // by the Volume Planner, not by the Open-category Anexa forms). PRV250/PRV25 are
+  // privately built UAS (<250 g / <25 kg) that carry no class mark.
+  { k: 'operating_class', label: 'Operating class', type: 'select', options: ['', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'PRV250', 'PRV25'] },
   { k: 'category', label: 'Category', type: 'select', options: ['', 'A1', 'A2', 'A3'] },
   { k: 'operator_code', label: 'Operator code' },
   { k: 'mtom_kg', label: 'MTOM (kg)', type: 'number' },

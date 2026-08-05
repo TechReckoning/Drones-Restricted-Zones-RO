@@ -298,8 +298,11 @@ async function fillPdf(type, text, dropdowns) {
         dict.set(PDFName.of('V'), asStr(ex));
         dict.set(PDFName.of('I'), pdf.context.obj([PDFNumber.of(idx)]));
       } else {
-        // Value not among the form's options — show it literally as a fallback.
+        // Value not among the form's options (e.g. a Specific-category C5/C6 drone
+        // on an Open-category Anexa) — show it literally, and drop any stale /I so
+        // /I-driven viewers don't fall back to the template's default option.
         dict.set(PDFName.of('V'), asStr(String(val)));
+        dict.delete(PDFName.of('I'));
         f.updateAppearances(font);
       }
     } catch (e) { console.warn('dropdown', name, val, e.message); }
