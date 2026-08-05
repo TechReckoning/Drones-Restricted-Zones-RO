@@ -193,8 +193,8 @@ const vpBridge = {
       if (onDone) onDone();
     });
   },
-  // Enable Geoman to draw the flight geography; onDone(fgFeature) when finished.
-  drawFG(shape, onDone) {
+  // Enable Geoman to draw the shape (FG for v1, controlled ground area for v2).
+  drawFG(shape, variant, onDone) {
     plannerDrawing = true;
     map.pm.disableDraw();
     if (shape === 'circle') map.pm.enableDraw('Circle', { snappable: true });
@@ -211,22 +211,43 @@ const vpBridge = {
       map.removeLayer(e.layer);
       plannerFG = fg;
       plannerGroup.clearLayers();
-      L.geoJSON(fg, { style: VP_STYLE.fg }).addTo(plannerGroup);
+      // v2: the drawn shape is the controlled ground area (GRB outer) → preview red.
+      L.geoJSON(fg, { style: variant === 'v2' ? VP_STYLE.grb : VP_STYLE.fg }).addTo(plannerGroup);
       try { map.fitBounds(L.geoJSON(fg).getBounds(), { padding: [60, 60] }); } catch { /* */ }
       plannerDrawing = false;
       if (onDone) onDone(fg);
     });
   },
-  // Buffer the stored FG outward by S_CV then S_GRB, draw all three, return
-  // the overlap list + ground-projection areas.
-  buildAndDraw(SCV, SGRB) {
+  // Build the three volumes from the drawn shape and draw them. v1 (default):
+  // shape = FG, buffer outward by S_CV → CV, S_GRB → GRB. v2: shape = controlled
+  // ground area = GRB outer, buffer INWARD by S_GRB → CV, S_CV → FG.
+  buildAndDraw(SCV, SGRB, variant, CD) {
     if (!plannerFG) return null;
-    const cv = turf.buffer(plannerFG, SCV / 1000, { units: 'kilometers', steps: 24 });
-    const grb = turf.buffer(cv, SGRB / 1000, { units: 'kilometers', steps: 24 });
+    const valid = (g) => g && g.geometry && turf.area(g) > 1;
+    let fg, cv, grb;
+    if (variant === 'v2') {
+      grb = plannerFG;
+      cv = turf.buffer(grb, -SGRB / 1000, { units: 'kilometers', steps: 24 });
+      fg = valid(cv) ? turf.buffer(cv, -SCV / 1000, { units: 'kilometers', steps: 24 }) : null;
+      if (!valid(cv) || !valid(fg)) {
+        plannerGroup.clearLayers();
+        L.geoJSON(grb, { style: VP_STYLE.grb }).addTo(plannerGroup);
+        if (valid(cv)) L.geoJSON(cv, { style: VP_STYLE.cv }).addTo(plannerGroup);
+        return {
+          collapsed: true, fg: null, cv: valid(cv) ? cv : null, grb, pilot: pilotLL, told: toldLL, pilotToCV: null,
+          overlaps: findZoneOverlaps(grb),
+          areas: { fg: 0, cv: valid(cv) ? turf.area(cv) : 0, grb: turf.area(grb) },
+        };
+      }
+    } else {
+      fg = plannerFG;
+      cv = turf.buffer(fg, SCV / 1000, { units: 'kilometers', steps: 24 });
+      grb = turf.buffer(cv, SGRB / 1000, { units: 'kilometers', steps: 24 });
+    }
     plannerGroup.clearLayers();
     L.geoJSON(grb, { style: VP_STYLE.grb }).addTo(plannerGroup);
     L.geoJSON(cv, { style: VP_STYLE.cv }).addTo(plannerGroup);
-    L.geoJSON(plannerFG, { style: VP_STYLE.fg }).addTo(plannerGroup);
+    L.geoJSON(fg, { style: VP_STYLE.fg }).addTo(plannerGroup);
     try { map.fitBounds(L.geoJSON(grb).getBounds(), { padding: [40, 40] }); } catch { /* */ }
     // VLOS: largest distance from the pilot to the CV outer boundary.
     let pilotToCV = null;
@@ -239,10 +260,13 @@ const vpBridge = {
       });
       pilotToCV = maxD;
     }
+    // FG realistic-size guard: side ≥ 3·CD (√area as a representative width).
+    const fgSide = Math.sqrt(turf.area(fg));
+    const fgTooSmall = CD ? fgSide < 3 * CD : false;
     return {
-      fg: plannerFG, cv, grb, pilot: pilotLL, told: toldLL, pilotToCV,
+      fg, cv, grb, pilot: pilotLL, told: toldLL, pilotToCV, fgTooSmall,
       overlaps: findZoneOverlaps(grb),
-      areas: { fg: turf.area(plannerFG), cv: turf.area(cv), grb: turf.area(grb) },
+      areas: { fg: turf.area(fg), cv: turf.area(cv), grb: turf.area(grb) },
     };
   },
   clear() {

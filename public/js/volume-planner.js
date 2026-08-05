@@ -29,13 +29,17 @@ const FORM_HTML = `
     <p class="hint">Compute the SORA operational volume (Flight Geography → Contingency
       Volume → Ground Risk Buffer) per the LBA/EU 2019/947 method.</p>
 
-    <div class="vp-group">Flight geography</div>
+    <div class="vp-group">Operational area</div>
+    <div class="vp-seg" role="radiogroup" aria-label="Build method">
+      <label><input type="radio" name="vp-variant" value="v1" checked /> <span>Flight geography<small>grow outward</small></span></label>
+      <label><input type="radio" name="vp-variant" value="v2" /> <span>Controlled area<small>shrink inward</small></span></label>
+    </div>
     <div class="vp-shape">
       <button type="button" id="vp-draw-poly" class="btn btn-ghost btn-mini">✏️ Polygon</button>
       <button type="button" id="vp-draw-circle" class="btn btn-ghost btn-mini">⭕ Circle</button>
       <button type="button" id="vp-clear" class="btn btn-ghost btn-mini">Clear</button>
     </div>
-    <p class="hint muted" id="vp-shape-status">No flight geography drawn yet.</p>
+    <p class="hint muted" id="vp-shape-status">No area drawn yet.</p>
     <div class="vp-shape">
       <button type="button" id="vp-set-pilot" class="btn btn-ghost btn-mini">📍 Pilot</button>
       <button type="button" id="vp-set-told" class="btn btn-ghost btn-mini">🛫 TO/LD</button>
@@ -90,7 +94,7 @@ export function initVolumePlanner({ container, billing, bridge }) {
   const q = (sel) => container.querySelector(sel);
   const root = q('.vp');
   const num = (id, dflt) => { const v = parseFloat(q('#' + id)?.value); return isFinite(v) ? v : dflt; };
-  const setShapeStatus = (has) => { q('#vp-shape-status').textContent = has ? '✓ Flight geography drawn — press Compute.' : 'No flight geography drawn yet.'; };
+  const setShapeStatus = (has) => { q('#vp-shape-status').textContent = has ? '✓ Area drawn — press Compute.' : 'No area drawn yet.'; };
 
   // ---- Gate: visible but inert until entitled ----
   function updateGate() { root.classList.toggle('vp-locked', !billing.access); }
@@ -153,14 +157,19 @@ export function initVolumePlanner({ container, billing, bridge }) {
   populateDrones();
 
   // ---- Draw the flight geography (via the map bridge) ----
+  const variant = () => q('input[name="vp-variant"]:checked').value;
   const startDraw = (shape) => {
     if (!billing.access || !bridge) return;
-    q('#vp-shape-status').textContent = 'Click on the map to draw the flight geography…';
-    bridge.drawFG(shape, () => setShapeStatus(true));
+    q('#vp-shape-status').textContent = `Click on the map to draw the ${variant() === 'v2' ? 'controlled ground area' : 'flight geography'}…`;
+    bridge.drawFG(shape, variant(), () => setShapeStatus(true));
   };
   q('#vp-draw-poly').addEventListener('click', () => startDraw('polygon'));
   q('#vp-draw-circle').addEventListener('click', () => startDraw('circle'));
   q('#vp-clear').addEventListener('click', () => { bridge && bridge.clear(); setShapeStatus(false); q('#vp-results').innerHTML = ''; });
+  // Switching build method invalidates the drawn shape (FG vs controlled area).
+  container.querySelectorAll('input[name="vp-variant"]').forEach((r) =>
+    r.addEventListener('change', () => { bridge && bridge.clear(); setShapeStatus(false); q('#vp-results').innerHTML = ''; })
+  );
   const placeMk = (kind, msg) => {
     if (!billing.access || !bridge) return;
     q('#vp-shape-status').textContent = msg;
@@ -183,11 +192,11 @@ export function initVolumePlanner({ container, billing, bridge }) {
       SGPS: num('vp-sgps', 3), SPos: num('vp-spos', 3), SK: num('vp-sk', 1),
       reactionTime: num('vp-treact', 1), groundVisibility: num('vp-gv', 5000),
     });
-    const extra = (bridge && bridge.hasFG()) ? bridge.buildAndDraw(res.SCV, res.SGRB) : null;
+    const extra = (bridge && bridge.hasFG()) ? bridge.buildAndDraw(res.SCV, res.SGRB, variant(), res.inputs.CD) : null;
     renderResults(q('#vp-results'), res, extra);
     // Wire the export button (only present when volumes were drawn).
     const exp = q('#vp-export');
-    if (exp && extra) {
+    if (exp && extra && !extra.collapsed) {
       exp.onclick = () => {
         const i = res.inputs;
         const kml = buildVolumeKml({
@@ -241,9 +250,19 @@ const fmtArea = (m2) => (m2 < 1e6 ? `${Math.round(m2).toLocaleString()} m²` : `
 
 function renderFootprint(extra, res) {
   if (!extra) {
-    return `<p class="hint">Draw a flight geography (above) then <b>Compute</b> to draw the
+    return `<p class="hint">Draw the operational area (above) then <b>Compute</b> to draw the
       volumes on the map and check them against live Romanian restrictions.</p>`;
   }
+  if (extra.collapsed) {
+    return `<div class="vp-foot">
+      <div class="vp-warn">⚠ The controlled ground area is too small for these buffers
+        (needs ≥ ${res ? r1(res.SCV + res.SGRB) : '?'} m of inward margin). Draw a larger area,
+        or reduce speed / choose a tighter termination.</div>
+      <div class="vp-areas"><span>GRB ${fmtArea(extra.areas.grb)}</span>${extra.areas.cv ? `<span>CV ${fmtArea(extra.areas.cv)}</span>` : ''}</div>
+    </div>`;
+  }
+  const tooSmall = extra.fgTooSmall
+    ? '<div class="vp-warn">⚠ Flight geography is below the 3·CD minimum realistic size.</div>' : '';
   let vlos = '';
   if (res && extra.pilotToCV != null) {
     const bvlos = extra.pilotToCV > res.vlosLimit;
@@ -260,6 +279,7 @@ function renderFootprint(extra, res) {
     : `<div class="vp-ok">✓ No Romanian restrictions intersect the operational footprint.</div>`;
   return `<div class="vp-foot">
     <div class="vp-areas"><span>FG ${fmtArea(extra.areas.fg)}</span><span>CV ${fmtArea(extra.areas.cv)}</span><span>GRB ${fmtArea(extra.areas.grb)}</span></div>
+    ${tooSmall}
     ${vlos}
     ${body}
     <button type="button" id="vp-export" class="btn btn-primary btn-block">⬇ Export KML (FG · CV · GRB${extra.pilot ? ' · Pilot' : ''})</button>

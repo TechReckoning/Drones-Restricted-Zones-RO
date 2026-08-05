@@ -441,6 +441,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .vp-seg label { flex: 1; display: flex; align-items: center; gap: 6px; border: 1px solid var(--panel-border); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .vp-seg label:has(input:checked) { border-color: var(--primary); background: rgba(59, 130, 246, 0.1); }
 .vp-seg input { accent-color: var(--primary); }
+.vp-seg small { display: block; font-size: 10px; font-weight: 400; color: var(--muted); margin-top: 1px; }
 
 .vp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .vp-grid-1 { grid-template-columns: 1fr; }
