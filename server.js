@@ -449,7 +449,7 @@ registerLibraryCrud('requests', 'flight_requests', ['form_type', 'label', 'field
 // are unconditional and must keep working after a trial/subscription lapses.
 // ---------------------------------------------------------------------------
 
-const USER_TABLES = ['operator_profile', 'pilots', 'drones', 'flight_zones', 'flight_requests', 'subscriptions'];
+const USER_TABLES = ['operator_profile', 'pilots', 'drones', 'flight_zones', 'flight_requests', 'volume_plans', 'subscriptions'];
 
 app.get('/api/account/export', requireUser, async (req, res) => {
   const out = {
