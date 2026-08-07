@@ -182,6 +182,7 @@ function renderList(kind) {
         <div class="lr-main"><strong>${escapeHtml(primaryLabel(kind, it))}</strong>
           <span class="lr-sub">${escapeHtml(secondaryLabel(kind, it))}</span></div>
         <div class="lr-actions">
+          ${kind === 'pilots' ? '<button class="btn btn-mini" data-act="record" title="Keep this pilot’s flight record (AACR)">📋 Flight record</button>' : ''}
           <button class="btn btn-mini" data-act="edit">Edit</button>
           <button class="btn btn-mini btn-danger" data-act="delete">Delete</button>
         </div>
@@ -213,7 +214,9 @@ function onRowClick(e, kind, fields) {
   if (!btn) return;
   const id = e.target.closest('.lib-row').dataset.id;
   const item = libraryData[kind].find((x) => x.id === id);
-  if (btn.dataset.act === 'edit') {
+  if (btn.dataset.act === 'record') {
+    openFlightRecord(item);
+  } else if (btn.dataset.act === 'edit') {
     fields.forEach((f) => { const inp = el(`f_${kind}_${f.k}`); if (inp) inp.value = item[f.k] == null ? '' : item[f.k]; });
     el(kind + '-editid').value = id;
     el(kind + '-save').textContent = 'Update';
@@ -233,6 +236,133 @@ function secondaryLabel(kind, it) {
   return kind === 'pilots'
     ? [it.phone, it.qualifications].filter(Boolean).join(' · ')
     : [it.registration, it.operating_class, it.category, it.mtom_kg != null ? it.mtom_kg + ' kg' : ''].filter(Boolean).join(' · ');
+}
+
+// ---------- Pilot Flight Record (AACR "Evidență proprie a zborurilor") ----------
+// Self-contained per-pilot record: a pilot-data block + a free-text flight log
+// (Type is the only fixed field). Hours use "00h00min"; the total sums minutes
+// with a 60-minute carry. Renders inline in the Pilots pane; downloads as .docx.
+// Nothing here is shared with the request forms or any other section.
+const FR_TYPES = ['Open — A1', 'Open — A2', 'Open — A3', 'Specific', 'Certificate'];
+const FR_PILOT_FIELDS = [
+  { k: 'surname', label: 'Surname (Nume)' },
+  { k: 'first_name', label: 'First name(s) (Prenume)' },
+  { k: 'address', label: 'Address (Adresa)' },
+  { k: 'phone_fixed', label: 'Fixed phone (Telefon fix)' },
+  { k: 'phone_mobile', label: 'Mobile (Telefon mobil)' },
+  { k: 'dob', label: 'Date of birth (Data nașterii)', placeholder: 'DD/MM/YYYY' },
+  { k: 'certificate_number', label: 'Pilot certificate number' },
+];
+function frParseHM(s) {
+  const str = String(s == null ? '' : s);
+  const h = str.match(/(\d+)\s*h/i); const m = str.match(/(\d+)\s*m/i);
+  if (!h && !m) return 0;
+  return (h ? parseInt(h[1], 10) : 0) * 60 + (m ? parseInt(m[1], 10) : 0);
+}
+const frFmtHM = (mins) => `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}min`;
+
+function frRowHtml(f = {}) {
+  const opts = ['', ...FR_TYPES].map((t) => `<option value="${escapeHtml(t)}"${(f.type || '') === t ? ' selected' : ''}>${t || '—'}</option>`).join('');
+  return `<tr class="fr-row">
+    <td><input class="fr-date" type="text" value="${escapeHtml(f.date || '')}" /></td>
+    <td><select class="fr-type">${opts}</select></td>
+    <td><input class="fr-reg" type="text" value="${escapeHtml(f.registration || '')}" /></td>
+    <td><input class="fr-route" type="text" value="${escapeHtml(f.route || '')}" /></td>
+    <td><input class="fr-hours" type="text" placeholder="00h00min" value="${escapeHtml(f.hours || '')}" /></td>
+    <td><button class="btn btn-mini btn-danger fr-del" title="Remove this flight">✕</button></td>
+  </tr>`;
+}
+
+async function openFlightRecord(pilot) {
+  el('lib-pilots').innerHTML = '<p class="hint">Loading…</p>';
+  const res = await api(`/api/pilots/${pilot.id}/flight-record`);
+  const raw = (res.ok ? (await res.json()).data : null) || {};
+  // Light first-time pre-fill from the pilot entry (mobile only — the record splits
+  // the name into surname/first name, which we don't guess).
+  const pd = raw.pilot || { phone_mobile: pilot.phone || '' };
+  renderFlightRecordEditor(pilot, pd, Array.isArray(raw.flights) ? raw.flights : []);
+}
+
+function renderFlightRecordEditor(pilot, pd, flights) {
+  const pane = el('lib-pilots');
+  pane.innerHTML = `
+    <button id="fr-back" class="btn btn-mini">← Back to pilots</button>
+    <h3 class="lib-formtitle" style="margin-top:8px">Flight record — ${escapeHtml(pilot.name || 'Pilot')}</h3>
+    <p class="hint">Your own record of all flights and flight times (AACR). Everything is free text except Type; hours use the <strong>00h00min</strong> format. Downloadable as .docx — not used anywhere else in the app.</p>
+
+    <div class="fr-section">Pilot data</div>
+    <div class="lib-form">
+      ${FR_PILOT_FIELDS.map((f) => `<label class="lib-field"><span>${f.label}</span><input id="fr_${f.k}" type="text" placeholder="${f.placeholder || ''}" value="${escapeHtml(pd[f.k] || '')}" /></label>`).join('')}
+    </div>
+
+    <div class="fr-section">Flight record</div>
+    <div class="fr-table-wrap">
+      <table class="fr-table">
+        <thead><tr><th>Date</th><th>Type</th><th>Registration</th><th>Route</th><th>Hours</th><th></th></tr></thead>
+        <tbody id="fr-rows">${(flights.length ? flights : [{}]).map(frRowHtml).join('')}</tbody>
+        <tfoot><tr><td colspan="4" style="text-align:right"><strong>Total number of hours</strong></td><td id="fr-total"><strong>0h00min</strong></td><td></td></tr></tfoot>
+      </table>
+    </div>
+    <button id="fr-add" class="btn btn-ghost btn-mini" style="margin-top:8px">+ Add flight</button>
+
+    <div class="fr-actions">
+      <button id="fr-save" class="btn btn-primary">💾 Save record</button>
+      <button id="fr-docx" class="btn btn-ghost">⬇ Download .docx</button>
+    </div>
+    <p id="fr-status" class="hint"></p>`;
+
+  const recompute = () => {
+    let mins = 0;
+    pane.querySelectorAll('.fr-hours').forEach((i) => { mins += frParseHM(i.value); });
+    el('fr-total').innerHTML = `<strong>${frFmtHM(mins)}</strong>`;
+  };
+  recompute();
+
+  el('fr-back').addEventListener('click', () => renderList('pilots'));
+  el('fr-add').addEventListener('click', () => el('fr-rows').insertAdjacentHTML('beforeend', frRowHtml()));
+  el('fr-rows').addEventListener('input', (e) => { if (e.target.classList.contains('fr-hours')) recompute(); });
+  el('fr-rows').addEventListener('click', (e) => {
+    const del = e.target.closest('.fr-del'); if (!del) return;
+    e.preventDefault();
+    if (el('fr-rows').querySelectorAll('.fr-row').length > 1) del.closest('.fr-row').remove();
+    else del.closest('.fr-row').querySelectorAll('input,select').forEach((n) => { n.value = ''; });
+    recompute();
+  });
+  el('fr-save').addEventListener('click', () => saveFlightRecord(pilot));
+  el('fr-docx').addEventListener('click', () => downloadFlightRecordDocx(pilot));
+}
+
+function collectFlightRecord() {
+  const pilot = {};
+  FR_PILOT_FIELDS.forEach((f) => { const inp = el('fr_' + f.k); pilot[f.k] = inp ? inp.value.trim() : ''; });
+  const flights = [...document.querySelectorAll('#fr-rows .fr-row')].map((r) => ({
+    date: r.querySelector('.fr-date').value.trim(),
+    type: r.querySelector('.fr-type').value,
+    registration: r.querySelector('.fr-reg').value.trim(),
+    route: r.querySelector('.fr-route').value.trim(),
+    hours: r.querySelector('.fr-hours').value.trim(),
+  })).filter((f) => f.date || f.type || f.registration || f.route || f.hours);
+  return { pilot, flights };
+}
+
+async function saveFlightRecord(pilot) {
+  const status = el('fr-status'); status.textContent = 'Saving…';
+  const res = await api(`/api/pilots/${pilot.id}/flight-record`, { method: 'PUT', body: JSON.stringify({ data: collectFlightRecord() }) });
+  status.textContent = res.ok ? '✓ Saved.' : 'Save failed.';
+}
+
+async function downloadFlightRecordDocx(pilot) {
+  const status = el('fr-status'); status.textContent = 'Generating…';
+  const res = await api(`/api/pilots/${pilot.id}/flight-record/docx`, { method: 'POST', body: JSON.stringify({ data: collectFlightRecord() }) });
+  if (!res.ok) { status.textContent = 'Download failed.'; return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safe = (pilot.name || 'pilot').replace(/[^\w -]/g, '').trim().replace(/\s+/g, '-') || 'pilot';
+  a.href = url; a.download = `flight-record-${safe}.docx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  status.textContent = '✓ Downloaded.';
 }
 
 // ---------- shared form helpers ----------

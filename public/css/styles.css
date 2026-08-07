@@ -570,6 +570,18 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .lr-sub { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .lr-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* Pilot Flight Record editor (inline in the Pilots pane) */
+.fr-section { margin: 16px 0 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+.fr-table-wrap { overflow-x: auto; }
+.fr-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+.fr-table th, .fr-table td { border: 1px solid var(--panel-border); padding: 3px 5px; text-align: left; vertical-align: middle; }
+.fr-table thead th { font-size: 11px; font-weight: 600; color: var(--muted); }
+.fr-table input, .fr-table select { width: 100%; box-sizing: border-box; background: transparent; border: 0; color: inherit; font: inherit; padding: 3px 4px; }
+.fr-table input:focus, .fr-table select:focus { outline: 1px solid var(--accent, #4a9eff); border-radius: 3px; }
+.fr-table td:last-child, .fr-table th:last-child { width: 30px; text-align: center; }
+.fr-table .fr-del { padding: 2px 7px; }
+.fr-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+
 @media (max-width: 560px) { .lib-form { grid-template-columns: 1fr; } }
 
 /* ---------- Footer + cookie notice + terms (Phase 4) ---------- */

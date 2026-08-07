@@ -21,6 +21,7 @@ const fs = require('fs');
 const https = require('https');
 const supa = require('./lib/supabase');
 const billing = require('./lib/stripe');
+const { buildFlightRecordDocx } = require('./flight_record_docx');
 
 const app = express();
 // Render (and most PaaS) terminate TLS at a proxy and forward the request, so
@@ -443,13 +444,39 @@ registerLibraryCrud('plans', 'volume_plans', ['name', 'data']);
 registerLibraryCrud('requests', 'flight_requests', ['form_type', 'label', 'fields']);
 
 // ---------------------------------------------------------------------------
+// Per-pilot Flight Record (AACR "Evidență proprie a zborurilor"). One record per
+// pilot, stored as a JSON blob; self-contained (never feeds the request forms).
+// GET/PUT load & save the record; POST …/docx renders the official .docx from the
+// posted (current, possibly unsaved) form data.
+// ---------------------------------------------------------------------------
+app.get('/api/pilots/:pilotId/flight-record', requireUser, requireEntitlement, async (req, res) => {
+  const { data, error } = await req.db.from('pilot_flight_records').select('data').eq('pilot_id', req.params.pilotId).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: (data && data.data) || null });
+});
+app.put('/api/pilots/:pilotId/flight-record', requireUser, requireEntitlement, async (req, res) => {
+  const row = { pilot_id: req.params.pilotId, user_id: req.user.id, data: (req.body && req.body.data) || {}, updated_at: new Date().toISOString() };
+  const { data, error } = await req.db.from('pilot_flight_records').upsert(row, { onConflict: 'pilot_id' }).select('data').single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data.data });
+});
+app.post('/api/pilots/:pilotId/flight-record/docx', requireUser, requireEntitlement, async (req, res) => {
+  try {
+    const buf = await buildFlightRecordDocx((req.body && req.body.data) || {});
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', 'attachment; filename="flight-record.docx"');
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---------------------------------------------------------------------------
 // GDPR self-serve: data export (portability) + account deletion (erasure).
 //
 // Deliberately behind requireUser ONLY — never requireEntitlement: these rights
 // are unconditional and must keep working after a trial/subscription lapses.
 // ---------------------------------------------------------------------------
 
-const USER_TABLES = ['operator_profile', 'pilots', 'drones', 'flight_zones', 'flight_requests', 'volume_plans', 'subscriptions'];
+const USER_TABLES = ['operator_profile', 'pilots', 'drones', 'flight_zones', 'flight_requests', 'volume_plans', 'pilot_flight_records', 'subscriptions'];
 
 app.get('/api/account/export', requireUser, async (req, res) => {
   const out = {
